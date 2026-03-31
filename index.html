@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Movie Browser</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Alfred's Epic Movie Browser!</h1>
+  
+  <!-- TAB NAVIGATION -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="home">Home</button>
+    <button class="tab-btn" data-tab="search">Search</button>
+    <button class="tab-btn" data-tab="watchlist">Watchlist</button>
+  </div>
+  
+  <!-- HOME TAB -->
+  <div id="home-tab" class="tab-content active">
+    <h2>Continue Watching</h2>
+    <div id="continueWatching" class="grid"></div>
+    
+    <h2 style="margin-top:30px;">Data Management</h2>
+    <button id="clearContinueWatching" class="action-btn danger">Clear Continue Watching</button>
+    <button id="clearWatchlist" class="action-btn danger">Clear Watchlist</button>
+    <button id="clearData" class="action-btn danger">Clear All</button>
+  </div>
+  
+  <!-- SEARCH TAB -->
+  <div id="search-tab" class="tab-content">
+    <input type="text" id="search" placeholder="Search movies or TV shows...">
+    <div id="results" class="grid"></div>
+  </div>
+  
+  <!-- WATCHLIST TAB -->
+  <div id="watchlist-tab" class="tab-content">
+    <h2>Your Watchlist</h2>
+    <div id="watchlist" class="grid"></div>
+  </div>
+  
+  <!-- MOVIE DETAILS MODAL -->
+  <div id="movieModal" class="modal">
+    <div class="modal-content">
+      <span class="close-btn">&times;</span>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+  
+  <!-- VIDEO PLAYER MODAL -->
+  <div id="videoModal" class="video-modal">
+    <button class="video-back" onclick="closeVideoModal()">← Back</button>
+    <button class="video-close" onclick="closeVideoModal()">&times;</button>
+    <div class="video-container">
+      <iframe id="videoFrame" src="" allowfullscreen allow="autoplay; encrypted-media"></iframe>
+    </div>
+    <div class="video-title" id="videoTitle"></div>
+  </div>
+  
+  <script src="script.js"></script>
+</body>
+</html>
