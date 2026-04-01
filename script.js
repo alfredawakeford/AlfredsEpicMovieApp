@@ -4,6 +4,8 @@ const resultsDiv = document.getElementById("results");
 let currentPage = 1;
 let currentQuery = "";
 let loading = false;
+let newAdditionsPage = 1;
+let newAdditionsLoading = false;
 
 // STORAGE KEYS
 const STORAGE_WATCHED = "movieBrowser_watched";
@@ -126,7 +128,7 @@ function displayContinueWatching() {
     items.sort((a, b) => b.addedAt - a.addedAt);
 
     if (items.length === 0) {
-        container.innerHTML = "<p>No watched content yet. Start watching from Search!</p>";
+        container.innerHTML = "<p>No watched content yet. Start watching now!</p>";
         return;
     }
 
@@ -598,8 +600,113 @@ document.addEventListener("keydown", (e) => {
     }
 });
 
+// ========== NEW ADDITIONS ==========
+async function loadNewAdditions(append = false) {
+    if (newAdditionsLoading) return;
+    
+    const container = document.getElementById("newAdditions");
+    
+    if (!append) {
+        container.innerHTML = "<p>Loading...</p>";
+        newAdditionsPage = 1;
+    }
+    
+    newAdditionsLoading = true;
+    
+    try {
+        const [moviesRes, tvRes] = await Promise.all([
+            fetch(`https://api.themoviedb.org/3/movie/now_playing?api_key=${apiKey}&page=${newAdditionsPage}`),
+            fetch(`https://api.themoviedb.org/3/tv/on_the_air?api_key=${apiKey}&page=${newAdditionsPage}`)
+        ]);
+        
+        const moviesData = await moviesRes.json();
+        const tvData = await tvRes.json();
+        
+        const movies = moviesData.results.map(m => ({ ...m, media_type: "movie" }));
+        const tv = tvData.results.map(t => ({ ...t, media_type: "tv" }));
+        
+        let combined = [...movies, ...tv];
+        combined.sort((a, b) => {
+            const dateA = new Date(a.release_date || a.first_air_date || 0);
+            const dateB = new Date(b.release_date || b.first_air_date || 0);
+            return dateB - dateA;
+        });
+        
+        displayNewAdditions(combined, !append);
+        newAdditionsPage++;
+    } catch (error) {
+        console.error("Error loading new additions:", error);
+        if (!append) {
+            container.innerHTML = "<p>Failed to load new additions</p>";
+        }
+    }
+    
+    newAdditionsLoading = false;
+}
+
+function displayNewAdditions(items, clear = true) {
+    const container = document.getElementById("newAdditions");
+    
+    if (clear) {
+        container.innerHTML = "";
+    }
+    
+    items.forEach(item => {
+        if (!item.poster_path) return;
+        
+        const div = document.createElement("div");
+        div.classList.add("movie");
+        
+        const title = item.title || item.name;
+        const type = item.media_type === "movie" ? "Movie" : "TV";
+        const releaseDate = item.release_date || item.first_air_date || "";
+        const year = releaseDate.split("-")[0];
+        
+        const badgeText = item.media_type === "tv" ? "New Episodes" : "New Movie";
+        const badgeClass = item.media_type === "tv" ? "release-badge tv" : "release-badge movie";
+        
+        div.innerHTML = `
+            <img src="https://image.tmdb.org/t/p/w300${item.poster_path}" alt="${title}">
+            <div class="${badgeClass}">${badgeText}</div>
+            <div class="movie-title">${title} (${type}) ${year}</div>
+        `;
+        
+        div.onclick = () => {
+            showMovieDetails(item, false);
+        };
+        
+        container.appendChild(div);
+    });
+    
+    // Add loading indicator at the end
+    if (!clear || newAdditionsPage > 1) {
+        const loader = document.createElement("div");
+        loader.className = "new-additions-loader";
+        loader.innerHTML = "Loading more...";
+        container.appendChild(loader);
+    }
+}
+
+// Add scroll event listener for New Additions
 document.addEventListener("DOMContentLoaded", () => {
     displayContinueWatching();
+    loadNewAdditions();
+    
+    // Infinite scroll for New Additions
+    const newAdditionsContainer = document.getElementById("newAdditions");
+    if (newAdditionsContainer) {
+        newAdditionsContainer.addEventListener("scroll", () => {
+            const scrollLeft = newAdditionsContainer.scrollLeft;
+            const scrollWidth = newAdditionsContainer.scrollWidth;
+            const clientWidth = newAdditionsContainer.clientWidth;
+            
+            // Load more when scrolled to 80% of the end
+            if (scrollLeft + clientWidth >= scrollWidth * 0.8) {
+                loadNewAdditions(true);
+            }
+        });
+    }
+    
     const movieModal = document.getElementById("movieModal");
     const closeBtn = document.querySelector(".close-btn");
     if (closeBtn && movieModal) {
