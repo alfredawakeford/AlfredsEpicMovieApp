@@ -6,6 +6,10 @@ let currentQuery = "";
 let loading = false;
 let newAdditionsPage = 1;
 let newAdditionsLoading = false;
+let currentVideoState = {
+    id: null, mediaType: null, season: null, episode: null,
+    itemTitle: null, totalEpisodesInSeason: 0, totalSeasons: 0
+};
 
 // STORAGE KEYS
 const STORAGE_WATCHED = "movieBrowser_watched";
@@ -430,24 +434,40 @@ async function showMovieDetails(item, fromContinueWatching = false) {
         `;
 
         if (item.media_type === "tv" && data.seasons?.length > 0) {
-            modalHTML += `<div class="seasons-container"><h3 style="margin:15px 0 10px;">Seasons & Episodes</h3>`;
+    		modalHTML += `<div class="seasons-container"><h3 style="margin:15px 0 10px;">Seasons & Episodes</h3>`;
 
-            for (const season of data.seasons) {
-                if (season.season_number === 0) continue;
+    		// Separate numbered seasons and specials
+    		const numberedSeasons = data.seasons.filter(s => s.season_number > 0);
+    		const specialsSeason = data.seasons.find(s => s.season_number === 0);
 
-                const isCurrentSeason = currentSeason === season.season_number;
+    		// Render numbered seasons first
+    		for (const season of numberedSeasons) {
+        		const isCurrentSeason = currentSeason === season.season_number;
+        		modalHTML += `
+            		<button class="season-toggle ${isCurrentSeason ? 'current' : ''}" data-season="${season.season_number}">
+                		${season.name} <span style="color:#888;font-size:14px">(${season.episode_count || '?'} eps)</span>
+            		</button>
+            		<div class="episodes-list" id="episodes-s${season.season_number}">
+                		<div class="episode-loading">Loading episodes...</div>
+            		</div>
+        		`;
+    		}
 
-                modalHTML += `
-                    <button class="season-toggle ${isCurrentSeason ? 'current' : ''}" data-season="${season.season_number}">
-                        ${season.name} <span style="color:#888;font-size:14px">(${season.episode_count || '?'} eps)</span>
-                    </button>
-                    <div class="episodes-list" id="episodes-s${season.season_number}">
-                        <div class="episode-loading">Loading episodes...</div>
-                    </div>
-                `;
-            }
-            modalHTML += `</div>`;
-        }
+    		// Render Specials at the bottom if they exist
+    		if (specialsSeason) {
+        		const isCurrentSeason = currentSeason === 0;
+        		modalHTML += `
+            		<button class="season-toggle ${isCurrentSeason ? 'current' : ''}" data-season="0">
+                		Extras <span style="color:#888;font-size:14px">(${specialsSeason.episode_count || '?'} Extras)</span>
+            		</button>
+            		<div class="episodes-list" id="episodes-s0">
+                		<div class="episode-loading">Loading episodes...</div>
+            		</div>
+        		`;
+    		}
+
+    		modalHTML += `</div>`;
+	}
 
         modalBody.innerHTML = modalHTML;
 
@@ -465,25 +485,28 @@ async function showMovieDetails(item, fromContinueWatching = false) {
                             const seasonData = await seasonRes.json();
 
                             if (seasonData.episodes?.length > 0) {
-                                episodesContainer.innerHTML = seasonData.episodes.map(ep => {
-                                    const epTitle = (ep.name || 'Episode ' + ep.episode_number).replace(/'/g, "\\'");
-                                    const videoTitle = `${title} - S${seasonNum}E${ep.episode_number}: ${ep.name}`.replace(/'/g, "\\'");
-                                    const isCurrentEpisode = currentSeason == seasonNum && currentEpisode == ep.episode_number;
+	                        episodesContainer.innerHTML = seasonData.episodes.map(ep => {
+        	                    const epTitle = (ep.name || 'Episode ' + ep.episode_number).replace(/'/g, "\\'");
+                	            const videoTitle = `${title} - S${seasonNum}E${ep.episode_number}: ${ep.name}`.replace(/'/g, "\\'");
+                        	    const isCurrentEpisode = currentSeason == seasonNum && currentEpisode == ep.episode_number;
 
-                                    return `
-                                        <div class="episode-item ${isCurrentEpisode ? 'current' : ''}">
-                                            <div class="episode-actions">
-                                                <button class="episode-play" title="Play episode"
-                                                    onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/tv/${item.id}/${seasonNum}-${ep.episode_number}', '${videoTitle}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${seasonNum}, ${ep.episode_number})">
-                                                    ▶
-                                                </button>
-                                            </div>
-                                            <span class="episode-number">E${ep.episode_number}</span>
-                                            <span class="episode-title">${ep.name}</span>
-                                            <span class="episode-date">${ep.air_date || 'TBA'}</span>
-                                        </div>
-                                    `;
-                                }).join('');
+	                            // 🆕 Hides "E#" for Season 0 (Specials/Extras)
+        	                    const episodeNumberDisplay = seasonNum == 0 ? '' : `<span class="episode-number">E${ep.episode_number}</span>`;
+
+	                            return `
+        	                        <div class="episode-item ${isCurrentEpisode ? 'current' : ''}">
+                	                    <div class="episode-actions">
+                        	                <button class="episode-play" title="Play episode"
+                                	           onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/tv/${item.id}/${seasonNum}-${ep.episode_number}', '${videoTitle}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${seasonNum}, ${ep.episode_number})">
+                                        	   ▶
+	                                        </button>
+        	                            </div>
+                	                    ${episodeNumberDisplay}
+                        	            <span class="episode-title">${ep.name}</span>
+                                	    <span class="episode-date">${ep.air_date || 'TBA'}</span>
+	                                </div>
+        	                    `;
+                	        }).join('');
                             } else {
                                 episodesContainer.innerHTML = '<div class="no-episodes">No episodes listed</div>';
                             }
@@ -525,61 +548,237 @@ function removeFromContinueWatching(id, mediaType) {
 }
 
 async function markEpisodeDone(id, mediaType, title, currentSeason, currentEpisode) {
+    let nextSeason, nextEpisode;
+
+    // 1️⃣ DATA LOGIC (API + localStorage)
     try {
         const seasonRes = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${currentSeason}?api_key=${apiKey}&language=en-US`);
+        if (!seasonRes.ok) throw new Error("Failed to fetch season data");
         const seasonData = await seasonRes.json();
         const totalEpisodes = seasonData.episodes?.length || 0;
-        
+
         if (currentEpisode >= totalEpisodes) {
             const showRes = await fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${apiKey}&language=en-US`);
+            if (!showRes.ok) throw new Error("Failed to fetch show data");
             const showData = await showRes.json();
             const totalSeasons = showData.seasons?.filter(s => s.season_number > 0).length || 0;
-            
+
             if (currentSeason >= totalSeasons) {
+                // 🎉 Series complete
                 removeFromWatched(id, mediaType);
-                
-            } else {
-                const nextSeason = currentSeason + 1;
-                const nextEpisode = 1;
-                updateTVEpisode(id, mediaType, nextSeason, nextEpisode);
-                
+                displayContinueWatching();
+                updateModalToUnwatchedState(id, title);
+                return; // Exit early, no next episode
             }
+            nextSeason = currentSeason + 1;
+            nextEpisode = 1;
         } else {
-            const nextEpisode = currentEpisode + 1;
-            updateTVEpisode(id, mediaType, currentSeason, nextEpisode);
-            
+            nextSeason = currentSeason;
+            nextEpisode = currentEpisode + 1;
         }
-        
-        document.getElementById("movieModal").style.display = "none";
-        displayContinueWatching();
+
+        // ✅ Save progress to localStorage
+        updateTVEpisode(id, mediaType, nextSeason, nextEpisode);
     } catch (error) {
-        console.error("Error marking episode done:", error);
+        console.error("Data save failed:", error);
         alert("Failed to update progress. Please try again.");
+        return; // Stop if actual data saving fails
+    }
+
+    // 2️⃣ UI LOGIC (Refresh DOM without closing modal)
+    // Wrapped separately so UI glitches won't trigger false data alerts
+    try {
+        displayContinueWatching();
+        updateModalUI(id, mediaType, title, nextSeason, nextEpisode);
+    } catch (uiError) {
+        console.warn("UI refresh skipped (data saved successfully):", uiError);
     }
 }
 
-function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath, season = null, episode = null) {
+// Helper: Updates action buttons in the modal
+function updateModalUI(id, mediaType, title, nextSeason, nextEpisode) {
+    const posterPath = document.querySelector('.modal-poster')?.getAttribute('src')?.split('/w500')[1] || '';
+    const modalActions = document.querySelector('.modal-actions');
+    
+    if (modalActions) {
+        modalActions.innerHTML = `
+            <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/tv/${id}/${nextSeason}-${nextEpisode}', '${title.replace(/'/g, "\\'")} - S${nextSeason}E${nextEpisode}', ${id}, '${mediaType}', '${title.replace(/'/g, "\\'")}', '${posterPath}', ${nextSeason}, ${nextEpisode})">
+               ▶ Play Season ${nextSeason} Episode ${nextEpisode}
+            </button>
+            <div class="tv-action-group">
+                <button class="episode-done-btn" onclick="markEpisodeDone(${id}, '${mediaType}', '${title.replace(/'/g, "\\'")}', ${nextSeason}, ${nextEpisode})">
+                   ✓ I watched this Episode
+                </button>
+                <button class="watched-btn" onclick="removeFromContinueWatching(${id}, '${mediaType}')">
+                   Remove from Continue Watching
+                </button>
+            </div>
+        `;
+    }
+
+    // Update episode highlighting
+    document.querySelectorAll('.episode-item.current').forEach(el => el.classList.remove('current'));
+    const nextEpItem = document.querySelector(`#episodes-s${nextSeason} .episode-item .episode-number`);
+    if (nextEpItem && nextEpItem.textContent.trim() === `E${nextEpisode}`) {
+        nextEpItem.parentElement.classList.add('current');
+    }
+
+    // Update season toggle highlight
+    document.querySelectorAll('.season-toggle.current').forEach(el => el.classList.remove('current'));
+    const nextSeasonBtn = document.querySelector(`.season-toggle[data-season="${nextSeason}"]`);
+    if (nextSeasonBtn) nextSeasonBtn.classList.add('current');
+
+    // Auto-expand next season if switching
+    if (nextSeason !== currentSeason) {
+        const episodesContainer = document.getElementById(`episodes-s${nextSeason}`);
+        if (episodesContainer && !episodesContainer.classList.contains('show')) {
+            nextSeasonBtn?.click();
+        }
+    }
+}
+
+// Helper: Resets modal to unwatched state when series finishes
+function updateModalToUnwatchedState(id, title) {
+    const posterPath = document.querySelector('.modal-poster')?.getAttribute('src')?.split('/w500')[1] || '';
+    const modalActions = document.querySelector('.modal-actions');
+    if (modalActions) {
+        modalActions.innerHTML = `
+            <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/tv/${id}/1-1', '${title.replace(/'/g, "\\'")} - S1E1', ${id}, 'tv', '${title.replace(/'/g, "\\'")}', '${posterPath}', 1, 1)">
+               ▶ Play Season 1 Episode 1
+            </button>
+            <button class="action-btn" onclick="toggleWatchlistFromModal(${id}, 'tv', '${title.replace(/'/g, "\\'")}', '${posterPath}')">
+               + Add to Watchlist
+            </button>
+        `;
+    }
+    document.querySelectorAll('.episode-item.current, .season-toggle.current').forEach(el => el.classList.remove('current'));
+}
+
+async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath, season = null, episode = null) {
     const modal = document.getElementById("videoModal");
     const iframe = document.getElementById("videoFrame");
     const titleEl = document.getElementById("videoTitle");
     if (!modal || !iframe) return;
 
-    // ✅ REMOVE FROM WATCHLIST WHEN PLAYING
     const watchlistItem = { id, media_type: mediaType, title: itemTitle, poster_path: posterPath };
     removeFromWatchlist(watchlistItem);
-
-    // Add to watched history
     addToWatched({ id, media_type: mediaType, title: itemTitle, poster_path: posterPath }, season, episode);
-    
+
     iframe.src = url;
-    titleEl.textContent = title || "Now Playing";
+    titleEl.textContent = title || "Now Playing"; // Initial title
     modal.style.display = "block";
     document.body.style.overflow = "hidden";
-    
-    // Refresh watchlist display if on that tab
+
     if (document.getElementById("watchlist-tab")?.classList.contains("active")) {
         displayWatchlist();
     }
+
+    // 🆕 FETCH EPISODE NAME (Fixes Image 2 -> Image 1)
+    if (mediaType.trim() === "tv" && season && episode) {
+        try {
+            const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=en-US`);
+            const seasonData = await res.json();
+            const epData = seasonData.episodes?.find(ep => ep.episode_number === episode);
+            if (epData && epData.name) {
+                titleEl.textContent = `${itemTitle} - S${season}E${episode}: ${epData.name}`;
+            }
+        } catch (err) { console.warn("Failed to fetch episode name:", err); }
+    }
+
+    setupVideoControls(id, mediaType, season, episode, itemTitle);
+}
+
+async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
+    const oldControls = document.getElementById("videoControls");
+    if (oldControls) oldControls.remove();
+    if (mediaType.trim() !== "tv" || !season || !episode) return;
+
+    currentVideoState = { id, mediaType: mediaType.trim(), season, episode, itemTitle, totalEpisodesInSeason: 0, totalSeasons: 0 };
+
+    const container = document.createElement("div");
+    container.id = "videoControls";
+    container.className = "video-controls";
+
+    const prevBtn = document.createElement("button");
+    prevBtn.textContent = "⏮ Previous Episode";
+    prevBtn.className = "video-nav-btn";
+    prevBtn.onclick = () => navigateEpisode(-1);
+
+    const nextBtn = document.createElement("button");
+    nextBtn.textContent = "Next Episode ⏭";
+    nextBtn.className = "video-nav-btn";
+    nextBtn.onclick = () => navigateEpisode(1);
+
+    container.appendChild(prevBtn);
+    container.appendChild(nextBtn);
+
+    document.getElementById("videoTitle").after(container);
+
+    try {
+        const [seasonRes, showRes] = await Promise.all([
+            fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=en-US`),
+            fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${apiKey}&language=en-US`)
+        ]);
+        const sData = await seasonRes.json();
+        const shData = await showRes.json();
+        currentVideoState.totalEpisodesInSeason = sData.episodes?.length || 0;
+        currentVideoState.totalSeasons = shData.seasons?.filter(s => s.season_number > 0).length || 0;
+    } catch (e) { console.error("Control limits fetch failed:", e); }
+    updateButtonStates();
+}
+
+async function navigateEpisode(direction) {
+    let s = currentVideoState.season;
+    let e = currentVideoState.episode;
+    const id = currentVideoState.id;
+
+    if (direction === 1) { // Next
+        if (e >= currentVideoState.totalEpisodesInSeason) {
+            if (s >= currentVideoState.totalSeasons) { alert("End of series!"); return; }
+            s++; e = 1;
+            try { const r = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${s}?api_key=${apiKey}`); currentVideoState.totalEpisodesInSeason = (await r.json()).episodes?.length || 0; } catch(err){}
+        } else { e++; }
+    } else { // Previous
+        if (e <= 1) {
+            if (s <= 1) { alert("First episode!"); return; }
+            s--;
+            try { const r = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${s}?api_key=${apiKey}`); const d = await r.json(); currentVideoState.totalEpisodesInSeason = d.episodes?.length || 0; } catch(err){}
+            e = currentVideoState.totalEpisodesInSeason;
+        } else { e--; }
+    }
+
+    currentVideoState.season = s;
+    currentVideoState.episode = e;
+
+    updateTVEpisode(id, currentVideoState.mediaType, s, e);
+    displayContinueWatching();
+
+    document.getElementById("videoFrame").src = `https://vidsrc-embed.ru/embed/tv/${id}/${s}-${e}`;
+    document.getElementById("videoTitle").textContent = `${currentVideoState.itemTitle} - S${s}E${e}`;
+
+    // Fetch episode name for title
+    try {
+        const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${s}?api_key=${apiKey}`);
+        const sd = await res.json();
+        const ed = sd.episodes?.find(ep => ep.episode_number === e);
+        if (ed?.name) document.getElementById("videoTitle").textContent = `${currentVideoState.itemTitle} - S${s}E${e}: ${ed.name}`;
+    } catch(err){}
+
+    // Sync background modal if open
+    if (document.getElementById('movieModal')?.style.display === 'block') {
+        try { updateModalUI(id, currentVideoState.mediaType, currentVideoState.itemTitle, s, e); } catch(e){}
+    }
+
+    updateButtonStates();
+}
+
+function updateButtonStates() {
+    const c = document.getElementById("videoControls");
+    if (!c) return;
+    const [prev, next] = c.querySelectorAll("button");
+    prev.disabled = currentVideoState.season <= 1 && currentVideoState.episode <= 1;
+    next.disabled = currentVideoState.season >= currentVideoState.totalSeasons && 
+                    currentVideoState.episode >= currentVideoState.totalEpisodesInSeason;
 }
 
 function closeVideoModal() {
@@ -588,7 +787,12 @@ function closeVideoModal() {
     if (modal) modal.style.display = "none";
     if (iframe) iframe.src = "";
     document.body.style.overflow = "";
-    if (document.getElementById("home-tab").classList.contains("active")) {
+
+    const controls = document.getElementById("videoControls");
+    if (controls) controls.remove();
+    currentVideoState = { id: null, mediaType: null, season: null, episode: null, itemTitle: null, totalEpisodesInSeason: 0, totalSeasons: 0 };
+
+    if (document.getElementById("home-tab")?.classList.contains("active")) {
         displayContinueWatching();
     }
 }
