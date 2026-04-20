@@ -688,3 +688,39 @@ p {
 .current-indicator {
     display: none;
 }
+
+/* ========================================
+VIDEO PLAYER CONTROLS
+======================================== */
+.video-controls {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin: 15px auto;
+    width: 90%;
+    max-width: 900px;
+}
+.video-nav-btn {
+    background: #333;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s, opacity 0.2s, transform 0.1s;
+    flex: 1;
+    max-width: 220px;
+}
+.video-nav-btn:hover:not(:disabled) {
+    background: #e50914;
+    transform: scale(1.02);
+}
+.video-nav-btn:active:not(:disabled) {
+    transform: scale(0.98);
+}
+.video-nav-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
