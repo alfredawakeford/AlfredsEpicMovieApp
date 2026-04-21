@@ -595,46 +595,88 @@ async function markEpisodeDone(id, mediaType, title, currentSeason, currentEpiso
     }
 }
 
-// Helper: Updates action buttons in the modal
 function updateModalUI(id, mediaType, title, nextSeason, nextEpisode) {
     const posterPath = document.querySelector('.modal-poster')?.getAttribute('src')?.split('/w500')[1] || '';
     const modalActions = document.querySelector('.modal-actions');
     
+    // 1️⃣ Find the CURRENT episode number from existing button before we replace it
+    let currentSeasonDisplay = nextSeason;
+    let currentEpisodeDisplay = nextEpisode;
+    const existingPlayBtn = modalActions?.querySelector('.play-btn');
+    if (existingPlayBtn) {
+        const match = existingPlayBtn.textContent.match(/Season (\d+) Episode (\d+)/);
+        if (match) {
+            currentSeasonDisplay = parseInt(match[1]);
+            currentEpisodeDisplay = parseInt(match[2]);
+        }
+    }
+    
     if (modalActions) {
+        // 2️⃣ Create button with CURRENT episode number (before update)
         modalActions.innerHTML = `
-            <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/tv/${id}/${nextSeason}-${nextEpisode}', '${title.replace(/'/g, "\\'")} - S${nextSeason}E${nextEpisode}', ${id}, '${mediaType}', '${title.replace(/'/g, "\\'")}', '${posterPath}', ${nextSeason}, ${nextEpisode})">
-               ▶ Play Season ${nextSeason} Episode ${nextEpisode}
+            <button class="play-btn" id="tempPlayBtn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/tv/${id}/${nextSeason}-${nextEpisode}', '${title.replace(/'/g, "\\'")} - S${nextSeason}E${nextEpisode}', ${id}, '${mediaType}', '${title.replace(/'/g, "\\'")}', '${posterPath}', ${nextSeason}, ${nextEpisode})" >
+              ▶ Play Season ${currentSeasonDisplay} Episode ${currentEpisodeDisplay}
             </button>
             <div class="tv-action-group">
-                <button class="episode-done-btn" onclick="markEpisodeDone(${id}, '${mediaType}', '${title.replace(/'/g, "\\'")}', ${nextSeason}, ${nextEpisode})">
-                   ✓ I watched this Episode
+                <button class="episode-done-btn" onclick="markEpisodeDone(${id}, '${mediaType}', '${title.replace(/'/g, "\\'")}', ${nextSeason}, ${nextEpisode})" >
+                  ✓ I watched this Episode
                 </button>
                 <button class="watched-btn" onclick="removeFromContinueWatching(${id}, '${mediaType}')">
-                   Remove from Continue Watching
+                  Remove from Continue Watching
                 </button>
             </div>
         `;
+        
+        // 3️⃣ Trigger pulse animation immediately
+        setTimeout(() => {
+            const playBtn = modalActions.querySelector('#tempPlayBtn');
+            if (playBtn) {
+                playBtn.classList.remove('pulse-yellow');
+                void playBtn.offsetWidth; // Force reflow
+                playBtn.classList.add('pulse-yellow');
+                
+                // 4️⃣ Update to NEXT episode number at MIDPOINT of animation (0.4s)
+                setTimeout(() => {
+                    playBtn.innerHTML = `▶ Play Season ${nextSeason} Episode ${nextEpisode}`;
+                    playBtn.removeAttribute('id');
+                }, 400); // Halfway through 0.8s animation
+                
+                playBtn.addEventListener('animationend', () => {
+                    playBtn.classList.remove('pulse-yellow');
+                }, { once: true });
+            }
+        }, 50);
     }
 
-    // Update episode highlighting
+    // Remove old highlight
     document.querySelectorAll('.episode-item.current').forEach(el => el.classList.remove('current'));
-    const nextEpItem = document.querySelector(`#episodes-s${nextSeason} .episode-item .episode-number`);
-    if (nextEpItem && nextEpItem.textContent.trim() === `E${nextEpisode}`) {
-        nextEpItem.parentElement.classList.add('current');
+
+    // Find target season & ensure accordion is open
+    const seasonContainer = document.getElementById(`episodes-s${nextSeason}`);
+    if (seasonContainer) {
+        if (!seasonContainer.classList.contains('show')) {
+            seasonContainer.classList.add('show');
+            const btn = document.querySelector(`.season-toggle[data-season="${nextSeason}"]`);
+            if (btn) btn.classList.add('active');
+        }
+
+        // Find & highlight the EXACT next episode
+        const epItems = seasonContainer.querySelectorAll('.episode-item');
+        epItems.forEach(item => {
+            const numSpan = item.querySelector('.episode-number');
+            if (numSpan && numSpan.textContent.trim() === `E${nextEpisode}`) {
+                item.classList.add('current');
+            } else if (!numSpan && nextSeason == 0) {
+                const index = Array.from(epItems).indexOf(item);
+                if (index === nextEpisode - 1) item.classList.add('current');
+            }
+        });
     }
 
     // Update season toggle highlight
     document.querySelectorAll('.season-toggle.current').forEach(el => el.classList.remove('current'));
     const nextSeasonBtn = document.querySelector(`.season-toggle[data-season="${nextSeason}"]`);
     if (nextSeasonBtn) nextSeasonBtn.classList.add('current');
-
-    // Auto-expand next season if switching
-    if (nextSeason !== currentSeason) {
-        const episodesContainer = document.getElementById(`episodes-s${nextSeason}`);
-        if (episodesContainer && !episodesContainer.classList.contains('show')) {
-            nextSeasonBtn?.click();
-        }
-    }
 }
 
 // Helper: Resets modal to unwatched state when series finishes
