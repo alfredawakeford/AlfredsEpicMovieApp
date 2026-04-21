@@ -700,12 +700,12 @@ async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
     container.className = "video-controls";
 
     const prevBtn = document.createElement("button");
-    prevBtn.textContent = "⏮ Previous Episode";
+    prevBtn.textContent = "Previous Episode";
     prevBtn.className = "video-nav-btn";
     prevBtn.onclick = () => navigateEpisode(-1);
 
     const nextBtn = document.createElement("button");
-    nextBtn.textContent = "Next Episode ⏭";
+    nextBtn.textContent = "Next Episode";
     nextBtn.className = "video-nav-btn";
     nextBtn.onclick = () => navigateEpisode(1);
 
