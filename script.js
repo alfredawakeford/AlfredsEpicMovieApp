@@ -52,26 +52,6 @@ document.getElementById("clearMoviesFromWatching")?.addEventListener("click", ()
     }
 });
 
-let movieLinkMap = {};
-
-async function loadMovieLinks() {
-    try {
-        const res = await fetch("movielinks.csv");
-        const text = await res.text();
-
-        text.split("\n").forEach(line => {
-            const [id, url] = line.split(",");
-            if (id && url) {
-                movieLinkMap[id.trim()] = url.trim();
-            }
-        });
-
-        console.log("Custom movie links loaded:", movieLinkMap);
-    } catch (err) {
-        console.warn("Failed to load movielinks.csv", err);
-    }
-}
-
 // ========== WATCH DATA MANAGEMENT ==========
 function getWatchedData() {
     return JSON.parse(localStorage.getItem(STORAGE_WATCHED) || "{}");
@@ -392,14 +372,10 @@ async function showMovieDetails(item, fromContinueWatching = false) {
 
         // ========== BUTTON LAYOUT LOGIC ==========
         if (item.media_type === "movie") {
-	    const customLink = movieLinkMap[item.id];
-	    const videoUrl = customLink 
-    	        ? customLink 
-    	        : `https://vidsrc-embed.ru/embed/movie/${item.id}`;
             if (isInWatched) {
                 // Watched Movie: Play + Remove
                 actionButtonsHTML = `
-                    <button class="play-btn" onclick="openVideoPlayer('${videoUrl}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
+                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
                         ▶ Play Movie
                     </button>
                     <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
@@ -409,7 +385,7 @@ async function showMovieDetails(item, fromContinueWatching = false) {
             } else {
                 // Unwatched Movie: Play + Watchlist
                 actionButtonsHTML = `
-                    <button class="play-btn" onclick="openVideoPlayer('${videoUrl}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
+                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
                         ▶ Play Movie
                     </button>
                     <button class="action-btn" onclick="toggleWatchlistFromModal(${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
@@ -959,7 +935,6 @@ function displayNewAdditions(items, clear = true) {
 
 // Add scroll event listener for New Additions
 document.addEventListener("DOMContentLoaded", () => {
-    loadMovieLinks();
     displayContinueWatching();
     loadNewAdditions();
     
