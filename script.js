@@ -12,36 +12,26 @@ let currentVideoState = {
 };
 
 // 🆕 ALTERNATE VIDEO LINKS
-let alternateLinks = new Map(); // Stores TMDB ID -> embed URL
+let alternateLinks = new Map();
 
-// Load alternate links from CSV
 async function loadAlternateLinks() {
     try {
         const response = await fetch('movielinks.csv');
-        if (!response.ok) {
-            console.warn('movielinks.csv not found - using default vidsrc embeds');
-            return;
-        }
+        if (!response.ok) return;
         const csvText = await response.text();
         const lines = csvText.trim().split('\n');
         
         lines.forEach((line, index) => {
-            if (index === 0) return; // Skip header row
+            if (index === 0) return; // Skip header
             const [tmdbId, embedUrl] = line.split(',').map(s => s.trim());
             if (tmdbId && embedUrl) {
                 alternateLinks.set(tmdbId, embedUrl);
             }
         });
-        
-        console.log(`Loaded ${alternateLinks.size} alternate video links`);
-    } catch (error) {
-        console.warn('Failed to load movielinks.csv:', error);
-    }
+    } catch (e) { console.warn('CSV load failed:', e); }
 }
 
-// Get alternate link for a movie/TV show
 function getAlternateLink(id, mediaType) {
-    // Only use alternate links for movies (not TV shows with seasons/episodes)
     if (mediaType === 'movie') {
         return alternateLinks.get(String(id)) || null;
     }
@@ -747,33 +737,27 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
     // 🆕 Check for alternate link
     const alternateUrl = getAlternateLink(id, mediaType);
     
-    // Clear previous content
+    // Clear container
     container.innerHTML = '';
     
     if (alternateUrl) {
-        // 🎬 Check if it's a direct .mp4 file
+        // 🎬 Direct .mp4 file?
         if (alternateUrl.toLowerCase().endsWith('.mp4')) {
-            // Direct video file - use <video> element
             const videoEl = document.createElement('video');
             videoEl.id = 'videoPlayer';
             videoEl.src = alternateUrl;
             videoEl.controls = true;
             videoEl.autoplay = true;
-            videoEl.style.width = '100%';
-            videoEl.style.height = '100%';
-            videoEl.style.objectFit = 'contain';
-            videoEl.style.background = '#000';
+            videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
             container.appendChild(videoEl);
-            console.log(`Using direct MP4 source for ${itemTitle}`);
         } else {
-            // 🖼️ Iframe embed (YouTube, Archive, etc.)
+            // 🖼️ Iframe embed
             iframe.src = alternateUrl;
             iframe.style.display = 'block';
             container.appendChild(iframe);
-            console.log(`Using alternate iframe source for ${itemTitle}`);
         }
     } else {
-        // Default vidsrc embed
+        // Default vidsrc
         iframe.src = url;
         iframe.style.display = 'block';
         container.appendChild(iframe);
@@ -787,7 +771,7 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
         displayWatchlist();
     }
 
-    // 🆕 FETCH EPISODE NAME
+    // Fetch episode name for TV
     if (mediaType.trim() === "tv" && season && episode) {
         try {
             const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=en-US`);
@@ -900,7 +884,7 @@ function closeVideoModal() {
     const container = document.querySelector(".video-container");
     if (modal) modal.style.display = "none";
     
-    // 🆕 Clear all content and reset to iframe
+    // 🆕 Reset container to default iframe
     if (container) {
         container.innerHTML = '<iframe id="videoFrame" allowfullscreen></iframe>';
     }
