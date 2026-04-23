@@ -12,7 +12,7 @@ let currentVideoState = {
 };
 
 // 🆕 ALTERNATE VIDEO LINKS
-let alternateLinks = new Map(); // Stores TMDB ID -> alternate embed URL
+let alternateLinks = new Map(); // Stores TMDB ID -> embed URL
 
 // Load alternate links from CSV
 async function loadAlternateLinks() {
@@ -25,7 +25,8 @@ async function loadAlternateLinks() {
         const csvText = await response.text();
         const lines = csvText.trim().split('\n');
         
-        lines.forEach(line => {
+        lines.forEach((line, index) => {
+            if (index === 0) return; // Skip header row
             const [tmdbId, embedUrl] = line.split(',').map(s => s.trim());
             if (tmdbId && embedUrl) {
                 alternateLinks.set(tmdbId, embedUrl);
@@ -736,22 +737,49 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
     const modal = document.getElementById("videoModal");
     const iframe = document.getElementById("videoFrame");
     const titleEl = document.getElementById("videoTitle");
-    if (!modal || !iframe) return;
+    const container = document.querySelector(".video-container");
+    if (!modal || !container) return;
     
     const watchlistItem = { id, media_type: mediaType, title: itemTitle, poster_path: posterPath };
     removeFromWatchlist(watchlistItem);
     addToWatched({ id, media_type: mediaType, title: itemTitle, poster_path: posterPath }, season, episode);
 
-    // 🆕 Check for alternate link (only for movies)
+    // 🆕 Check for alternate link
     const alternateUrl = getAlternateLink(id, mediaType);
+    
+    // Clear previous content
+    container.innerHTML = '';
+    
     if (alternateUrl) {
-        iframe.src = alternateUrl;
-        console.log(`Using alternate source for ${itemTitle}`);
+        // 🎬 Check if it's a direct .mp4 file
+        if (alternateUrl.toLowerCase().endsWith('.mp4')) {
+            // Direct video file - use <video> element
+            const videoEl = document.createElement('video');
+            videoEl.id = 'videoPlayer';
+            videoEl.src = alternateUrl;
+            videoEl.controls = true;
+            videoEl.autoplay = true;
+            videoEl.style.width = '100%';
+            videoEl.style.height = '100%';
+            videoEl.style.objectFit = 'contain';
+            videoEl.style.background = '#000';
+            container.appendChild(videoEl);
+            console.log(`Using direct MP4 source for ${itemTitle}`);
+        } else {
+            // 🖼️ Iframe embed (YouTube, Archive, etc.)
+            iframe.src = alternateUrl;
+            iframe.style.display = 'block';
+            container.appendChild(iframe);
+            console.log(`Using alternate iframe source for ${itemTitle}`);
+        }
     } else {
+        // Default vidsrc embed
         iframe.src = url;
+        iframe.style.display = 'block';
+        container.appendChild(iframe);
     }
     
-    titleEl.textContent = title || "Now Playing"; // Initial title
+    titleEl.textContent = title || "Now Playing";
     modal.style.display = "block";
     document.body.style.overflow = "hidden";
 
@@ -759,7 +787,7 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
         displayWatchlist();
     }
 
-    // 🆕 FETCH EPISODE NAME (Fixes Image 2 -> Image 1)
+    // 🆕 FETCH EPISODE NAME
     if (mediaType.trim() === "tv" && season && episode) {
         try {
             const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=en-US`);
@@ -869,11 +897,15 @@ function updateButtonStates() {
 
 function closeVideoModal() {
     const modal = document.getElementById("videoModal");
-    const iframe = document.getElementById("videoFrame");
+    const container = document.querySelector(".video-container");
     if (modal) modal.style.display = "none";
-    if (iframe) iframe.src = "";
+    
+    // 🆕 Clear all content and reset to iframe
+    if (container) {
+        container.innerHTML = '<iframe id="videoFrame" allowfullscreen></iframe>';
+    }
+    
     document.body.style.overflow = "";
-
     const controls = document.getElementById("videoControls");
     if (controls) controls.remove();
     currentVideoState = { id: null, mediaType: null, season: null, episode: null, itemTitle: null, totalEpisodesInSeason: 0, totalSeasons: 0 };
