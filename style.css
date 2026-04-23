@@ -751,9 +751,8 @@ VIDEO PLAYER CONTROLS
     width: 100%;
     height: 100%;
     object-fit: contain;
-    background: #000;
 }
 
 .video-container video::-webkit-media-controls {
-    background: rgba(0,0,0,0.8);
+    background: rgba(0,0,0,0);
 }
