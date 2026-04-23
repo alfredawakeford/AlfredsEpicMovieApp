@@ -11,6 +11,42 @@ let currentVideoState = {
     itemTitle: null, totalEpisodesInSeason: 0, totalSeasons: 0
 };
 
+// 🆕 ALTERNATE VIDEO LINKS
+let alternateLinks = new Map(); // Stores TMDB ID -> alternate embed URL
+
+// Load alternate links from CSV
+async function loadAlternateLinks() {
+    try {
+        const response = await fetch('movielinks.csv');
+        if (!response.ok) {
+            console.warn('movielinks.csv not found - using default vidsrc embeds');
+            return;
+        }
+        const csvText = await response.text();
+        const lines = csvText.trim().split('\n');
+        
+        lines.forEach(line => {
+            const [tmdbId, embedUrl] = line.split(',').map(s => s.trim());
+            if (tmdbId && embedUrl) {
+                alternateLinks.set(tmdbId, embedUrl);
+            }
+        });
+        
+        console.log(`Loaded ${alternateLinks.size} alternate video links`);
+    } catch (error) {
+        console.warn('Failed to load movielinks.csv:', error);
+    }
+}
+
+// Get alternate link for a movie/TV show
+function getAlternateLink(id, mediaType) {
+    // Only use alternate links for movies (not TV shows with seasons/episodes)
+    if (mediaType === 'movie') {
+        return alternateLinks.get(String(id)) || null;
+    }
+    return null;
+}
+
 // STORAGE KEYS
 const STORAGE_WATCHED = "movieBrowser_watched";
 const STORAGE_WATCHLIST = "movieBrowser_watchlist";
@@ -701,12 +737,20 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
     const iframe = document.getElementById("videoFrame");
     const titleEl = document.getElementById("videoTitle");
     if (!modal || !iframe) return;
-
+    
     const watchlistItem = { id, media_type: mediaType, title: itemTitle, poster_path: posterPath };
     removeFromWatchlist(watchlistItem);
     addToWatched({ id, media_type: mediaType, title: itemTitle, poster_path: posterPath }, season, episode);
 
-    iframe.src = url;
+    // 🆕 Check for alternate link (only for movies)
+    const alternateUrl = getAlternateLink(id, mediaType);
+    if (alternateUrl) {
+        iframe.src = alternateUrl;
+        console.log(`Using alternate source for ${itemTitle}`);
+    } else {
+        iframe.src = url;
+    }
+    
     titleEl.textContent = title || "Now Playing"; // Initial title
     modal.style.display = "block";
     document.body.style.overflow = "hidden";
@@ -935,6 +979,7 @@ function displayNewAdditions(items, clear = true) {
 
 // Add scroll event listener for New Additions
 document.addEventListener("DOMContentLoaded", () => {
+    loadAlternateLinks();
     displayContinueWatching();
     loadNewAdditions();
     
