@@ -38,6 +38,35 @@ function getAlternateLink(id, mediaType) {
     return null;
 }
 
+// 🆕 TV ALTERNATE VIDEO LINKS (id, season, episode, url)
+let tvAlternateLinks = new Map();
+
+async function loadTvAlternateLinks() {
+    try {
+        const response = await fetch('tvlinks.csv');
+        if (!response.ok) return;
+        const csvText = await response.text();
+        const lines = csvText.trim().split('\n');
+        
+        lines.forEach((line, index) => {
+            if (index === 0) return; // Skip header
+            const parts = line.split(',').map(s => s.trim());
+            if (parts.length >= 4) {
+                const [id, season, episode, embedUrl] = parts;
+                // Composite key: "id_season_episode"
+                const key = `${id}_${season}_${episode}`;
+                tvAlternateLinks.set(key, embedUrl);
+            }
+        });
+    } catch (e) { console.warn('tvlinks.csv load failed:', e); }
+}
+
+// Get alternate link for a TV episode
+function getTvAlternateLink(id, season, episode) {
+    const key = `${id}_${season}_${episode}`;
+    return tvAlternateLinks.get(key) || null;
+}
+
 // STORAGE KEYS
 const STORAGE_WATCHED = "movieBrowser_watched";
 const STORAGE_WATCHLIST = "movieBrowser_watchlist";
@@ -735,7 +764,13 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
     addToWatched({ id, media_type: mediaType, title: itemTitle, poster_path: posterPath }, season, episode);
 
     // 🆕 Check for alternate link
-    const alternateUrl = getAlternateLink(id, mediaType);
+    let alternateUrl = null;
+    
+    if (mediaType === 'movie') {
+        alternateUrl = getAlternateLink(id, mediaType);
+    } else if (mediaType === 'tv' && season && episode) {
+        alternateUrl = getTvAlternateLink(id, season, episode);
+    }
     
     // Clear container
     container.innerHTML = '';
@@ -750,11 +785,13 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
             videoEl.autoplay = true;
             videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
             container.appendChild(videoEl);
+            console.log(`Using direct MP4 source for ${itemTitle} S${season}E${episode}`);
         } else {
             // 🖼️ Iframe embed
             iframe.src = alternateUrl;
             iframe.style.display = 'block';
             container.appendChild(iframe);
+            console.log(`Using alternate iframe source for ${itemTitle} S${season}E${episode}`);
         }
     } else {
         // Default vidsrc
@@ -996,6 +1033,7 @@ function displayNewAdditions(items, clear = true) {
 // Add scroll event listener for New Additions
 document.addEventListener("DOMContentLoaded", () => {
     loadAlternateLinks();
+    loadTvAlternateLinks(); 
     displayContinueWatching();
     loadNewAdditions();
     
