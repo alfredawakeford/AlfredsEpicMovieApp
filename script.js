@@ -819,14 +819,15 @@ async function navigateEpisode(direction) {
     let s = currentVideoState.season;
     let e = currentVideoState.episode;
     const id = currentVideoState.id;
-    
-    if (direction === 1) {
+
+    // --- Calculate Next/Prev Episode ---
+    if (direction === 1) { // Next
         if (e >= currentVideoState.totalEpisodesInSeason) {
             if (s >= currentVideoState.totalSeasons) { alert("End of series!"); return; }
             s++; e = 1;
             try { const r = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${s}?api_key=${apiKey}`); currentVideoState.totalEpisodesInSeason = (await r.json()).episodes?.length || 0; } catch(err){}
         } else { e++; }
-    } else {
+    } else { // Previous
         if (e <= 1) {
             if (s <= 1) { alert("First episode!"); return; }
             s--;
@@ -834,29 +835,54 @@ async function navigateEpisode(direction) {
             e = currentVideoState.totalEpisodesInSeason;
         } else { e--; }
     }
-    
+
     currentVideoState.season = s;
     currentVideoState.episode = e;
-    
+
     updateTVEpisode(id, currentVideoState.mediaType, s, e);
     displayContinueWatching();
-    
-    const newUrl = `https://vidsrc-embed.ru/embed/tv/${id}/${s}-${e}`;
-    setVideoSource(id, currentVideoState.mediaType, s, e, newUrl);
-    
+
+    // ✅ FIX: Clear container and check for alternate links
+    const container = document.querySelector(".video-container");
+    container.innerHTML = ''; // Remove old iframe or video
+
+    let defaultSrc = `https://vidsrc-embed.ru/embed/tv/${id}/${s}-${e}`;
+    const alternateUrl = getTvAlternateLink(id, s, e); // Check TV links CSV
+
+    if (alternateUrl && alternateUrl.toLowerCase().endsWith('.mp4')) {
+        // 🎬 Direct Video
+        const videoEl = document.createElement('video');
+        videoEl.id = 'videoPlayer';
+        videoEl.src = alternateUrl;
+        videoEl.controls = true;
+        videoEl.autoplay = true;
+        videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
+        container.appendChild(videoEl);
+    } else {
+        // 🖼️ Iframe (Alternate or Default)
+        const iframe = document.createElement('iframe');
+        iframe.id = 'videoFrame';
+        iframe.allowFullscreen = true;
+        iframe.src = alternateUrl || defaultSrc;
+        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;';
+        container.appendChild(iframe);
+    }
+
     document.getElementById("videoTitle").textContent = `${currentVideoState.itemTitle} - S${s}E${e}`;
-    
+
+    // Fetch episode name for title
     try {
         const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${s}?api_key=${apiKey}`);
         const sd = await res.json();
         const ed = sd.episodes?.find(ep => ep.episode_number === e);
         if (ed?.name) document.getElementById("videoTitle").textContent = `${currentVideoState.itemTitle} - S${s}E${e}: ${ed.name}`;
     } catch(err){}
-    
+
+    // Sync background modal
     if (document.getElementById('movieModal')?.style.display === 'block') {
         try { updateModalUI(id, currentVideoState.mediaType, currentVideoState.itemTitle, s, e); } catch(e){}
     }
-    
+
     updateButtonStates();
 }
 
@@ -871,20 +897,19 @@ function updateButtonStates() {
 
 function closeVideoModal() {
     const modal = document.getElementById("videoModal");
-    const container = document.querySelector(".video-container");
+    const container = document.querySelector(".video-container"); // ✅ Target container
     
     if (modal) modal.style.display = "none";
     
-    if (container) {
-        container.innerHTML = '<iframe id="videoFrame" allowfullscreen></iframe>';
-    }
+    // ✅ Clear all content (video or iframe)
+    if (container) container.innerHTML = ''; 
     
     document.body.style.overflow = "";
     const controls = document.getElementById("videoControls");
     if (controls) controls.remove();
     
     currentVideoState = { id: null, mediaType: null, season: null, episode: null, itemTitle: null, totalEpisodesInSeason: 0, totalSeasons: 0 };
-    
+
     if (document.getElementById("home-tab")?.classList.contains("active")) {
         displayContinueWatching();
     }
