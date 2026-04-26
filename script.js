@@ -67,32 +67,12 @@ function getTvAlternateLink(id, season, episode) {
     return tvAlternateLinks.get(key) || null;
 }
 
-// 🆕 BBC iPlayer Helper: Detects and converts BBC links to modern embed format
-function getBBCiPlayerEmbedUrl(url) {
-    if (!url) return null;
-    
-    // If it's just a PID (8 alphanumeric chars), convert to embed URL
-    if (/^[a-z0-9]{8}$/i.test(url.trim())) {
-        return `https://www.bbc.co.uk/iplayer/embed/pid/${url.trim()}`;
-    }
-    
-    // If it's a full BBC iPlayer URL, extract the PID
-    const match = url.match(/iplayer\/episode\/([a-z0-9]{8})/i);
-    if (match && match[1]) {
-        return `https://www.bbc.co.uk/iplayer/embed/pid/${match[1]}`;
-    }
-    
-    // Not a BBC link
-    return null;
-}
-
 // Helper: Sets video source (checks alternate links, handles .mp4 vs iframe)
 function setVideoSource(id, mediaType, season, episode, url) {
     const container = document.querySelector(".video-container");
     const iframe = document.getElementById("videoFrame");
     if (!container) return;
     
-    // Check for alternate link
     let alternateUrl = null;
     if (mediaType === 'tv' && season && episode) {
         alternateUrl = getTvAlternateLink(id, season, episode);
@@ -102,35 +82,24 @@ function setVideoSource(id, mediaType, season, episode, url) {
     
     container.innerHTML = '';
     
-    // 🆕 Check for BBC iPlayer first
-    const bbcEmbedUrl = getBBCiPlayerEmbedUrl(alternateUrl || url);
-    if (bbcEmbedUrl) {
-        const iframeEl = document.createElement('iframe');
-        iframeEl.src = bbcEmbedUrl;
-        iframeEl.allowFullscreen = true;
-        iframeEl.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;';
-        container.appendChild(iframeEl);
-        console.log(`Using BBC iPlayer embed: ${bbcEmbedUrl}`);
-        return;
-    }
-    
-    // 🎬 Direct .mp4 file?
-    if (alternateUrl && alternateUrl.toLowerCase().endsWith('.mp4')) {
-        const videoEl = document.createElement('video');
-        videoEl.id = 'videoPlayer';
-        videoEl.src = alternateUrl;
-        videoEl.controls = true;
-        videoEl.autoplay = true;
-        videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
-        container.appendChild(videoEl);
+    if (alternateUrl) {
+        if (alternateUrl.toLowerCase().endsWith('.mp4')) {
+            const videoEl = document.createElement('video');
+            videoEl.id = 'videoPlayer';
+            videoEl.src = alternateUrl;
+            videoEl.controls = true;
+            videoEl.autoplay = true;
+            videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
+            container.appendChild(videoEl);
+        } else {
+            iframe.src = alternateUrl;
+            iframe.style.display = 'block';
+            container.appendChild(iframe);
+        }
     } else {
-        // 🖼️ Iframe embed (vidsrc, YouTube, Archive, etc.)
-        const iframeEl = document.createElement('iframe');
-        iframeEl.id = 'videoFrame';
-        iframeEl.allowFullscreen = true;
-        iframeEl.src = alternateUrl || url;
-        iframeEl.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;';
-        container.appendChild(iframeEl);
+        iframe.src = url;
+        iframe.style.display = 'block';
+        container.appendChild(iframe);
     }
 }
 
@@ -928,12 +897,12 @@ function updateButtonStates() {
 
 function closeVideoModal() {
     const modal = document.getElementById("videoModal");
-    const container = document.querySelector(".video-container");
+    const container = document.querySelector(".video-container"); // ✅ Target container
     
     if (modal) modal.style.display = "none";
     
-    // ✅ Clear ALL content (video, iframe, or BBC embed)
-    if (container) container.innerHTML = '';
+    // ✅ Clear all content (video or iframe)
+    if (container) container.innerHTML = ''; 
     
     document.body.style.overflow = "";
     const controls = document.getElementById("videoControls");
