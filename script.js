@@ -876,7 +876,6 @@ async function navigateEpisode(direction) {
     let e = currentVideoState.episode;
     const id = currentVideoState.id;
 
-    // --- Calculate Next/Prev Episode ---
     if (direction === 1) { // Next
         if (e >= currentVideoState.totalEpisodesInSeason) {
             if (s >= currentVideoState.totalSeasons) { alert("End of series!"); return; }
@@ -898,35 +897,15 @@ async function navigateEpisode(direction) {
     updateTVEpisode(id, currentVideoState.mediaType, s, e);
     displayContinueWatching();
 
-    // ✅ FIX: Clear container and check for alternate links
+    // ✅ Safety: Recreate iframe to ensure it exists for vidsrc links
     const container = document.querySelector(".video-container");
-    container.innerHTML = ''; // Remove old iframe or video
-
-    let defaultSrc = `https://vidsrc-embed.ru/embed/tv/${id}/${s}-${e}`;
-    const alternateUrl = getTvAlternateLink(id, s, e); // Check TV links CSV
-
-    if (alternateUrl && alternateUrl.toLowerCase().endsWith('.mp4')) {
-        // 🎬 Direct Video
-        const videoEl = document.createElement('video');
-        videoEl.id = 'videoPlayer';
-        videoEl.src = alternateUrl;
-        videoEl.controls = true;
-        videoEl.autoplay = true;
-        videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
-        container.appendChild(videoEl);
-    } else {
-        // 🖼️ Iframe (Alternate or Default)
-        const iframe = document.createElement('iframe');
-        iframe.id = 'videoFrame';
-        iframe.allowFullscreen = true;
-        iframe.src = alternateUrl || defaultSrc;
-        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;';
-        container.appendChild(iframe);
-    }
+    container.innerHTML = '<iframe id="videoFrame" allowfullscreen></iframe>';
+    
+    const newUrl = `https://vidsrc-embed.ru/embed/tv/${id}/${s}-${e}`;
+    document.getElementById("videoFrame").src = newUrl;
 
     document.getElementById("videoTitle").textContent = `${currentVideoState.itemTitle} - S${s}E${e}`;
 
-    // Fetch episode name for title
     try {
         const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${s}?api_key=${apiKey}`);
         const sd = await res.json();
@@ -934,7 +913,6 @@ async function navigateEpisode(direction) {
         if (ed?.name) document.getElementById("videoTitle").textContent = `${currentVideoState.itemTitle} - S${s}E${e}: ${ed.name}`;
     } catch(err){}
 
-    // Sync background modal
     if (document.getElementById('movieModal')?.style.display === 'block') {
         try { updateModalUI(id, currentVideoState.mediaType, currentVideoState.itemTitle, s, e); } catch(e){}
     }
