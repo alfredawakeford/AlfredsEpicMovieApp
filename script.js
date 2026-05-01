@@ -72,26 +72,35 @@ function getTvAlternateLink(id, season, episode) {
 }
 
 // ========== PLAYBACK TIMELINE HELPERS ==========
+// Uses unique key per episode/movie to prevent overwrites
+function getProgressKey(id, mediaType, season, episode) {
+    return `${mediaType}_${id}_${season || 0}_${episode || 0}`;
+}
+
 function savePlaybackPosition(id, mediaType, season, episode, time) {
     const watched = getWatchedData();
-    const key = `${mediaType}_${id}`;
-    if (watched[key]) {
-        watched[key].playbackPosition = time;
-        watched[key].lastWatched = Date.now();
-        saveWatchedData(watched);
+    const key = getProgressKey(id, mediaType, season, episode);
+    // Ensure base watched data exists
+    const baseKey = `${mediaType}_${id}`;
+    if (!watched[baseKey]) {
+        watched[baseKey] = { id, media_type: mediaType, title: '', poster_path: '', currentSeason: season, currentEpisode: episode, addedAt: Date.now() };
     }
+    watched[baseKey].playbackPosition = time;
+    watched[baseKey].lastWatched = Date.now();
+    saveWatchedData(watched);
 }
 
 function getSavedPosition(id, mediaType, season, episode) {
     const watched = getWatchedData();
-    return watched[`${mediaType}_${id}`]?.playbackPosition || 0;
+    const baseKey = `${mediaType}_${id}`;
+    return watched[baseKey]?.playbackPosition || 0;
 }
 
 function clearPlaybackPosition(id, mediaType) {
     const watched = getWatchedData();
-    const key = `${mediaType}_${id}`;
-    if (watched[key]) {
-        delete watched[key].playbackPosition;
+    const baseKey = `${mediaType}_${id}`;
+    if (watched[baseKey]) {
+        delete watched[baseKey].playbackPosition;
         saveWatchedData(watched);
     }
 }
@@ -100,9 +109,8 @@ function clearPlaybackPosition(id, mediaType) {
 function loadVideoElement(url, id, mediaType, season, episode, startAtZero = false) {
     const container = document.querySelector(".video-container");
     if (!container) return;
-    container.innerHTML = ''; // Clear previous player
+    container.innerHTML = '';
 
-    // Check for alternate link
     let finalUrl = url;
     if (mediaType === 'tv' && season && episode) {
         finalUrl = getTvAlternateLink(id, season, episode) || url;
@@ -115,19 +123,19 @@ function loadVideoElement(url, id, mediaType, season, episode, startAtZero = fal
         video.id = 'videoPlayer';
         video.src = finalUrl;
         video.controls = true;
-        video.autoplay = true;
         video.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
         container.appendChild(video);
 
-        // Auto-resume (silent, no prompt)
-        if (!startAtZero) {
-            const savedPos = getSavedPosition(id, mediaType, season, episode);
-            if (savedPos > 5) {
-                video.addEventListener('loadedmetadata', () => {
-                    if (video.duration > savedPos + 10) video.currentTime = savedPos;
-                }, { once: true });
+        const savedPos = getSavedPosition(id, mediaType, season, episode);
+        const shouldResume = !startAtZero && savedPos > 5;
+
+        // Reliable resume: seek first, then play
+        video.addEventListener('loadedmetadata', () => {
+            if (shouldResume && video.duration > savedPos + 10) {
+                video.currentTime = savedPos;
             }
-        }
+            video.play().catch(() => {});
+        }, { once: true });
 
         // Auto-save every 5 seconds
         videoSaveInterval = setInterval(() => {
@@ -164,7 +172,6 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
     removeFromWatchlist(watchlistItem);
     addToWatched({ id, media_type: mediaType, title: itemTitle, poster_path: posterPath }, season, episode);
 
-    // Clear previous interval
     if (videoSaveInterval) { clearInterval(videoSaveInterval); videoSaveInterval = null; }
 
     loadVideoElement(url, id, mediaType, season, episode, startAtZero);
@@ -431,7 +438,6 @@ async function showMovieDetails(item, fromContinueWatching = false) {
                             const seasonData = await seasonRes.json();
                             if (seasonData.episodes?.length > 0) {
                                 container.innerHTML = seasonData.episodes.map(ep => {
-                                    const epTitle = (ep.name || 'Episode ' + ep.episode_number).replace(/'/g, "\\'");
                                     const videoTitle = `${title} - S${seasonNum}E${ep.episode_number}: ${ep.name}`.replace(/'/g, "\\'");
                                     const isCurrentEpisode = currentSeason == seasonNum && currentEpisode == ep.episode_number;
                                     const epNumDisplay = seasonNum == 0 ? '' : `<span class="episode-number">E${ep.episode_number}</span>`;
@@ -477,7 +483,7 @@ function toggleWatchlistFromModal(id, mediaType, title, posterPath) {
 }
 
 function removeFromContinueWatching(id, mediaType) {
-    clearPlaybackPosition(id, mediaType); // ✅ Clears saved timestamp
+    clearPlaybackPosition(id, mediaType);
     removeFromWatched(id, mediaType);
     document.getElementById("movieModal").style.display = "none";
     displayContinueWatching();
@@ -543,12 +549,11 @@ function updateModalUI(id, mediaType, title, nextSeason, nextEpisode) {
             </div>
         `;
         
-        // Pulse animation trigger
         setTimeout(() => {
             const playBtn = modalActions.querySelector('#tempPlayBtn');
             if (playBtn) {
                 playBtn.classList.remove('pulse-yellow');
-                void playBtn.offsetWidth; // Force reflow
+                void playBtn.offsetWidth;
                 playBtn.classList.add('pulse-yellow');
                 
                 setTimeout(() => {
@@ -563,7 +568,6 @@ function updateModalUI(id, mediaType, title, nextSeason, nextEpisode) {
         }, 50);
     }
 
-    // Highlight next episode
     document.querySelectorAll('.episode-item.current').forEach(el => el.classList.remove('current'));
     const seasonContainer = document.getElementById(`episodes-s${nextSeason}`);
     if (seasonContainer) {
@@ -584,7 +588,6 @@ function updateModalUI(id, mediaType, title, nextSeason, nextEpisode) {
         });
     }
 
-    // Highlight season toggle
     document.querySelectorAll('.season-toggle.current').forEach(el => el.classList.remove('current'));
     const nextSeasonBtn = document.querySelector(`.season-toggle[data-season="${nextSeason}"]`);
     if (nextSeasonBtn) nextSeasonBtn.classList.add('current');
