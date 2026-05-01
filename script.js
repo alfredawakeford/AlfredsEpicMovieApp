@@ -72,35 +72,32 @@ function getTvAlternateLink(id, season, episode) {
 }
 
 // ========== PLAYBACK TIMELINE HELPERS ==========
-// Uses unique key per episode/movie to prevent overwrites
 function getProgressKey(id, mediaType, season, episode) {
     return `${mediaType}_${id}_${season || 0}_${episode || 0}`;
 }
 
 function savePlaybackPosition(id, mediaType, season, episode, time) {
     const watched = getWatchedData();
-    const key = getProgressKey(id, mediaType, season, episode);
-    // Ensure base watched data exists
-    const baseKey = `${mediaType}_${id}`;
-    if (!watched[baseKey]) {
-        watched[baseKey] = { id, media_type: mediaType, title: '', poster_path: '', currentSeason: season, currentEpisode: episode, addedAt: Date.now() };
+    const key = `${mediaType}_${id}`;
+    if (!watched[key]) {
+        watched[key] = { id, media_type: mediaType, title: '', poster_path: '', currentSeason: season, currentEpisode: episode, addedAt: Date.now() };
     }
-    watched[baseKey].playbackPosition = time;
-    watched[baseKey].lastWatched = Date.now();
+    watched[key].playbackPosition = time;
+    watched[key].lastWatched = Date.now();
     saveWatchedData(watched);
 }
 
 function getSavedPosition(id, mediaType, season, episode) {
     const watched = getWatchedData();
-    const baseKey = `${mediaType}_${id}`;
-    return watched[baseKey]?.playbackPosition || 0;
+    const key = `${mediaType}_${id}`;
+    return watched[key]?.playbackPosition || 0;
 }
 
 function clearPlaybackPosition(id, mediaType) {
     const watched = getWatchedData();
-    const baseKey = `${mediaType}_${id}`;
-    if (watched[baseKey]) {
-        delete watched[baseKey].playbackPosition;
+    const key = `${mediaType}_${id}`;
+    if (watched[key]) {
+        delete watched[key].playbackPosition;
         saveWatchedData(watched);
     }
 }
@@ -112,24 +109,21 @@ function loadVideoElement(url, id, mediaType, season, episode, startAtZero = fal
     container.innerHTML = '';
 
     let finalUrl = url;
-    if (mediaType === 'tv' && season && episode) {
-        finalUrl = getTvAlternateLink(id, season, episode) || url;
-    } else if (mediaType === 'movie') {
-        finalUrl = getAlternateLink(id, mediaType) || url;
-    }
+    if (mediaType === 'tv' && season && episode) finalUrl = getTvAlternateLink(id, season, episode) || url;
+    else if (mediaType === 'movie') finalUrl = getAlternateLink(id, mediaType) || url;
 
     if (finalUrl.toLowerCase().endsWith('.mp4')) {
         const video = document.createElement('video');
         video.id = 'videoPlayer';
         video.src = finalUrl;
         video.controls = true;
+        video.preload = 'metadata';
         video.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
         container.appendChild(video);
 
         const savedPos = getSavedPosition(id, mediaType, season, episode);
         const shouldResume = !startAtZero && savedPos > 5;
 
-        // Reliable resume: seek first, then play
         video.addEventListener('loadedmetadata', () => {
             if (shouldResume && video.duration > savedPos + 10) {
                 video.currentTime = savedPos;
@@ -137,14 +131,13 @@ function loadVideoElement(url, id, mediaType, season, episode, startAtZero = fal
             video.play().catch(() => {});
         }, { once: true });
 
-        // Auto-save every 5 seconds
+        if (videoSaveInterval) clearInterval(videoSaveInterval);
         videoSaveInterval = setInterval(() => {
             if (!video.paused && video.currentTime > 0) {
                 savePlaybackPosition(id, mediaType, season, episode, video.currentTime);
             }
         }, 5000);
 
-        // Save instantly on pause/seek/finish
         const saveNow = () => savePlaybackPosition(id, mediaType, season, episode, video.currentTime);
         video.addEventListener('pause', saveNow);
         video.addEventListener('seeked', saveNow);
@@ -153,7 +146,6 @@ function loadVideoElement(url, id, mediaType, season, episode, startAtZero = fal
             if (videoSaveInterval) clearInterval(videoSaveInterval);
         });
     } else {
-        // Iframe fallback
         const iframe = document.createElement('iframe');
         iframe.id = 'videoFrame';
         iframe.allowFullscreen = true;
@@ -168,13 +160,14 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
     const titleEl = document.getElementById("videoTitle");
     if (!modal) return;
 
-    const watchlistItem = { id, media_type: mediaType, title: itemTitle, poster_path: posterPath };
+    const safeType = mediaType === 'tv' ? 'tv' : 'movie';
+    const watchlistItem = { id, media_type: safeType, title: itemTitle, poster_path: posterPath };
     removeFromWatchlist(watchlistItem);
-    addToWatched({ id, media_type: mediaType, title: itemTitle, poster_path: posterPath }, season, episode);
+    addToWatched({ id, media_type: safeType, title: itemTitle, poster_path: posterPath }, season, episode);
 
     if (videoSaveInterval) { clearInterval(videoSaveInterval); videoSaveInterval = null; }
 
-    loadVideoElement(url, id, mediaType, season, episode, startAtZero);
+    loadVideoElement(url, id, safeType, season, episode, startAtZero);
 
     titleEl.textContent = title || "Now Playing";
     modal.style.display = "block";
@@ -184,7 +177,7 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
         displayWatchlist();
     }
 
-    if (mediaType.trim() === "tv" && season && episode) {
+    if (safeType === "tv" && season && episode) {
         try {
             const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=en-US`);
             const seasonData = await res.json();
@@ -193,7 +186,7 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
         } catch (err) { console.warn("Failed to fetch episode name:", err); }
     }
 
-    setupVideoControls(id, mediaType, season, episode, itemTitle);
+    setupVideoControls(id, safeType, season, episode, itemTitle);
 }
 
 async function navigateEpisode(direction) {
@@ -201,7 +194,6 @@ async function navigateEpisode(direction) {
     let e = currentVideoState.episode;
     const id = currentVideoState.id;
 
-    // Save current position before switching
     const currentVideo = document.querySelector('.video-container video');
     if (currentVideo && videoSaveInterval) {
         savePlaybackPosition(id, currentVideoState.mediaType, s, e, currentVideo.currentTime);
@@ -209,7 +201,6 @@ async function navigateEpisode(direction) {
         videoSaveInterval = null;
     }
 
-    // Calculate next/prev
     if (direction === 1) {
         if (e >= currentVideoState.totalEpisodesInSeason) {
             if (s >= currentVideoState.totalSeasons) { alert("End of series!"); return; }
@@ -231,7 +222,6 @@ async function navigateEpisode(direction) {
     updateTVEpisode(id, currentVideoState.mediaType, s, e);
     displayContinueWatching();
 
-    // Force start at 0:00 for next/prev
     const newUrl = `https://vidsrc-embed.ru/embed/tv/${id}/${s}-${e}`;
     await openVideoPlayer(newUrl, `${currentVideoState.itemTitle} - S${s}E${e}`, id, currentVideoState.mediaType, currentVideoState.itemTitle, '', s, e, true);
 
@@ -244,9 +234,9 @@ async function navigateEpisode(direction) {
 async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
     const oldControls = document.getElementById("videoControls");
     if (oldControls) oldControls.remove();
-    if (mediaType.trim() !== "tv" || !season || !episode) return;
+    if (mediaType !== "tv" || !season || !episode) return;
 
-    currentVideoState = { id, mediaType: mediaType.trim(), season, episode, itemTitle, totalEpisodesInSeason: 0, totalSeasons: 0 };
+    currentVideoState = { id, mediaType, season, episode, itemTitle, totalEpisodesInSeason: 0, totalSeasons: 0 };
 
     const container = document.createElement("div");
     container.id = "videoControls";
@@ -293,7 +283,6 @@ function closeVideoModal() {
     const container = document.querySelector(".video-container");
     if (modal) modal.style.display = "none";
 
-    // Save final position & clear interval
     const currentVideo = document.querySelector('.video-container video');
     if (currentVideo && videoSaveInterval) {
         savePlaybackPosition(currentVideoState.id, currentVideoState.mediaType, currentVideoState.season, currentVideoState.episode, currentVideo.currentTime);
@@ -343,44 +332,45 @@ async function showMovieDetails(item, fromContinueWatching = false) {
 
         let actionButtonsHTML = "";
         const posterPath = data.poster_path || '';
+        const safeType = item.media_type === 'tv' ? 'tv' : 'movie';
 
-        if (item.media_type === "movie") {
+        if (safeType === "movie") {
             actionButtonsHTML = isInWatched ? `
-                <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${posterPath}')">
+                <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${safeType}', '${title.replace(/'/g, "\\'")}', '${posterPath}')">
                     ▶ Play Movie
                 </button>
-                <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
+                <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${safeType}')">
                     Remove from Continue Watching
                 </button>
             ` : `
-                <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${posterPath}')">
+                <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${safeType}', '${title.replace(/'/g, "\\'")}', '${posterPath}')">
                     ▶ Play Movie
                 </button>
-                <button class="action-btn" onclick="toggleWatchlistFromModal(${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${posterPath}')">
+                <button class="action-btn" onclick="toggleWatchlistFromModal(${item.id}, '${safeType}', '${title.replace(/'/g, "\\'")}', '${posterPath}')">
                     + Add to Watchlist
                 </button>
             `;
-        } else if (item.media_type === "tv") {
+        } else if (safeType === "tv") {
             if (isInWatched && currentSeason && currentEpisode) {
                 actionButtonsHTML = `
-                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/tv/${item.id}/${currentSeason}-${currentEpisode}', '${title} - S${currentSeason}E${currentEpisode}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${posterPath}', ${currentSeason}, ${currentEpisode})">
+                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/tv/${item.id}/${currentSeason}-${currentEpisode}', '${title} - S${currentSeason}E${currentEpisode}', ${item.id}, '${safeType}', '${title.replace(/'/g, "\\'")}', '${posterPath}', ${currentSeason}, ${currentEpisode})">
                         ▶ Play Season ${currentSeason} Episode ${currentEpisode}
                     </button>
                     <div class="tv-action-group">
-                        <button class="episode-done-btn" onclick="markEpisodeDone(${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', ${currentSeason}, ${currentEpisode})">
+                        <button class="episode-done-btn" onclick="markEpisodeDone(${item.id}, '${safeType}', '${title.replace(/'/g, "\\'")}', ${currentSeason}, ${currentEpisode})">
                             ✓ I watched this Episode
                         </button>
-                        <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
+                        <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${safeType}')">
                             Remove from Continue Watching
                         </button>
                     </div>
                 `;
             } else {
                 actionButtonsHTML = `
-                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/tv/${item.id}/1-1', '${title} - S1E1', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${posterPath}', 1, 1)">
+                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/tv/${item.id}/1-1', '${title} - S1E1', ${item.id}, '${safeType}', '${title.replace(/'/g, "\\'")}', '${posterPath}', 1, 1)">
                         ▶ Play Season 1 Episode 1
                     </button>
-                    <button class="action-btn" onclick="toggleWatchlistFromModal(${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${posterPath}')">
+                    <button class="action-btn" onclick="toggleWatchlistFromModal(${item.id}, '${safeType}', '${title.replace(/'/g, "\\'")}', '${posterPath}')">
                         + Add to Watchlist
                     </button>
                 `;
@@ -396,7 +386,7 @@ async function showMovieDetails(item, fromContinueWatching = false) {
             <div class="modal-actions">${actionButtonsHTML}</div>
         `;
 
-        if (item.media_type === "tv" && data.seasons?.length > 0) {
+        if (safeType === "tv" && data.seasons?.length > 0) {
             modalHTML += `<div class="seasons-container"><h3 style="margin:15px 0 10px;">Seasons & Episodes</h3>`;
             const numberedSeasons = data.seasons.filter(s => s.season_number > 0);
             const specialsSeason = data.seasons.find(s => s.season_number === 0);
@@ -424,7 +414,7 @@ async function showMovieDetails(item, fromContinueWatching = false) {
 
         modalBody.innerHTML = modalHTML;
 
-        if (item.media_type === "tv") {
+        if (safeType === "tv") {
             document.querySelectorAll('.season-toggle').forEach(btn => {
                 btn.onclick = async (e) => {
                     e.stopPropagation();
@@ -445,7 +435,7 @@ async function showMovieDetails(item, fromContinueWatching = false) {
                                         <div class="episode-item ${isCurrentEpisode ? 'current' : ''}">
                                             <div class="episode-actions">
                                                 <button class="episode-play" title="Play episode"
-                                                    onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/tv/${item.id}/${seasonNum}-${ep.episode_number}', '${videoTitle}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${posterPath}', ${seasonNum}, ${ep.episode_number})">
+                                                    onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/tv/${item.id}/${seasonNum}-${ep.episode_number}', '${videoTitle}', ${item.id}, '${safeType}', '${title.replace(/'/g, "\\'")}', '${posterPath}', ${seasonNum}, ${ep.episode_number})">
                                                     ▶
                                                 </button>
                                             </div>
@@ -614,10 +604,14 @@ function addToWatched(item, season = null, episode = null) {
     const watched = getWatchedData();
     const key = `${item.media_type}_${item.id}`;
     watched[key] = {
-        id: item.id, media_type: item.media_type,
-        title: item.title || item.name, poster_path: item.poster_path,
-        currentSeason: season, currentEpisode: episode,
-        addedAt: Date.now(), lastWatched: Date.now()
+        id: item.id,
+        media_type: item.media_type === 'tv' ? 'tv' : 'movie',
+        title: item.title || item.name,
+        poster_path: item.poster_path,
+        currentSeason: season,
+        currentEpisode: episode,
+        addedAt: Date.now(),
+        lastWatched: Date.now()
     };
     saveWatchedData(watched);
 }
