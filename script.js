@@ -217,6 +217,7 @@ document.getElementById("clearMoviesFromWatching")?.addEventListener("click", ()
         }
         saveWatchedData(watched);
         displayContinueWatching();
+        clearVideoProgress('movie'); // ✅ Clears movie timestamps
     }
 });
 
@@ -232,6 +233,20 @@ function getWatchlist() {
 }
 function saveWatchlist(data) {
     localStorage.setItem(STORAGE_WATCHLIST, JSON.stringify(data));
+}
+// 🗑️ Clear timestamp data from localStorage
+function clearVideoProgress(filterMediaType = null) {
+    const keysToDelete = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('videoProgress_')) {
+            // If a filter is provided, only match that media type (e.g., 'movie' or 'tv')
+            if (!filterMediaType || key.includes(`_${filterMediaType}_`)) {
+                keysToDelete.push(key);
+            }
+        }
+    }
+    keysToDelete.forEach(k => localStorage.removeItem(k));
 }
 function addToWatched(item, season = null, episode = null) {
     const watched = getWatchedData();
@@ -397,21 +412,25 @@ document.getElementById("exportCsv")?.addEventListener("click", () => {
     URL.revokeObjectURL(url);
 });
 
-document.getElementById("clearData")?.addEventListener("click", () => {
-    if (confirm("Are you sure? This will delete all watch history and watchlist!")) {
-        localStorage.removeItem(STORAGE_WATCHED);
-        localStorage.removeItem(STORAGE_WATCHLIST);
-        displayContinueWatching();
-        displayWatchlist();
-        alert("All data cleared!");
-    }
-});
-
+// ========== CLEAR CONTINUE WATCHING ==========
 document.getElementById("clearContinueWatching")?.addEventListener("click", () => {
     if (confirm("Are you sure you want to clear all Continue Watching items?")) {
         localStorage.removeItem(STORAGE_WATCHED);
         displayContinueWatching();
         alert("Continue Watching cleared!");
+        clearVideoProgress(); // ✅ Clears ALL timestamps
+    }
+});
+
+// ========== CLEAR ALL DATA ==========
+document.getElementById("clearData")?.addEventListener("click", () => {
+    if (confirm("Are you sure? This will delete all watch history, watchlist, and playback progress!")) {
+        localStorage.removeItem(STORAGE_WATCHED);
+        localStorage.removeItem(STORAGE_WATCHLIST);
+        displayContinueWatching();
+        displayWatchlist();
+        alert("All data cleared!");
+        clearVideoProgress(); // ✅ Clears ALL timestamps
     }
 });
 
