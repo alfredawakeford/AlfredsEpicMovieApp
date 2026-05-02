@@ -756,3 +756,8 @@ VIDEO PLAYER CONTROLS
 .video-container video::-webkit-media-controls {
     background: rgba(0,0,0,0);
 }
+
+/* Hide Debug Timeline */
+#video-timeline-debug {
+    display: none !important;
+}
