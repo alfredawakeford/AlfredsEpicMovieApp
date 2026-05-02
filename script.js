@@ -267,7 +267,6 @@ function removeFromWatched(id, mediaType, season = null, episode = null) {
     if (season !== null && episode !== null) {
         clearVideoTimestamp(id, mediaType, season, episode);
     } else {
-        // If no season/episode provided, clear all timestamps for this item
         clearAllTimestampsForItem(id, mediaType);
     }
     
@@ -705,7 +704,6 @@ function toggleWatchlistFromModal(id, mediaType, title, posterPath) {
 }
 
 function removeFromContinueWatching(id, mediaType) {
-    // Get current season/episode if TV
     const watched = getWatchedData();
     const key = `${mediaType}_${id}`;
     const item = watched[key];
@@ -1001,7 +999,7 @@ function closeVideoModal() {
     const container = document.querySelector(".video-container");
     const videoEl = document.getElementById("videoPlayer");
     
-    // 💾 Save timestamp if it's an MP4 video AND still in Continue Watching
+    // 💾 Save timestamp ONLY if still in Continue Watching
     if (videoEl && currentVideoState.id) {
         const currentTime = videoEl.currentTime;
         const watched = getWatchedData();
@@ -1021,9 +1019,8 @@ function closeVideoModal() {
     }
     
     if (modal) modal.style.display = "none";
-    if (container) container.innerHTML = ''; 
+    if (container) container.innerHTML = '';
     
-    // Clear debug timeline
     const debugEl = document.getElementById('video-timeline-debug');
     if (debugEl) {
         debugEl.textContent = '';
@@ -1044,6 +1041,7 @@ function closeVideoModal() {
         displayContinueWatching();
     }
 }
+
 document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
         closeVideoModal();
