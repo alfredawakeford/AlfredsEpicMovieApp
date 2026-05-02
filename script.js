@@ -69,13 +69,33 @@ function formatTime(seconds) {
 // 🔍 Attach debug timeline listener to a <video> element
 function attachDebugTimeline(videoEl) {
     const debugEl = document.getElementById('video-timeline-debug');
-    if (!debugEl) return;
+    if (!debugEl) {
+        console.error("⚠️ #video-timeline-debug element missing from index.html!");
+        return;
+    }
+    
     debugEl.style.display = 'block';
+    debugEl.style.color = '#aaa';
+    debugEl.textContent = '⏳ Loading video metadata...';
 
+    // 1. Update as soon as duration/size is known
+    videoEl.addEventListener('loadedmetadata', () => {
+        const current = formatTime(videoEl.currentTime);
+        const duration = formatTime(videoEl.duration);
+        debugEl.textContent = `🔍 Debug: ${current} / ${duration} | Raw: ${videoEl.currentTime.toFixed(2)}s`;
+    });
+
+    // 2. Update continuously during playback
     videoEl.addEventListener('timeupdate', () => {
         const current = formatTime(videoEl.currentTime);
         const duration = formatTime(videoEl.duration);
         debugEl.textContent = `🔍 Debug: ${current} / ${duration} | Raw: ${videoEl.currentTime.toFixed(2)}s`;
+    });
+
+    // 3. Catch playback errors
+    videoEl.addEventListener('error', () => {
+        debugEl.style.color = '#e50914';
+        debugEl.textContent = `❌ Video Error: ${videoEl.error?.message || 'Failed to load source'}`;
     });
 }
 
@@ -922,6 +942,12 @@ function updateButtonStates() {
 }
 
 function closeVideoModal() {
+    const debugEl = document.getElementById('video-timeline-debug');
+    if (debugEl) {
+        debugEl.textContent = '';
+        debugEl.style.display = 'none';
+        debugEl.style.color = '#aaa';
+    }
     const modal = document.getElementById("videoModal");
     const container = document.querySelector(".video-container"); // ✅ Target container
     
@@ -929,12 +955,6 @@ function closeVideoModal() {
     
     // ✅ Clear all content (video or iframe)
     if (container) container.innerHTML = ''; 
-
-    const debugEl = document.getElementById('video-timeline-debug');
-    if (debugEl) {
-        debugEl.textContent = '';
-        debugEl.style.display = 'none';
-    }
     
     document.body.style.overflow = "";
     const controls = document.getElementById("videoControls");
