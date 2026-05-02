@@ -106,7 +106,7 @@ function formatTime(seconds) {
 }
 
 // 🔍 Attach debug timeline listener to a <video> element
-function attachDebugTimeline(videoEl, id, mediaType, season, episode) {
+function attachDebugTimeline(videoEl, id, mediaType, season, episode, autoResume = true) {
     const debugEl = document.getElementById('video-timeline-debug');
     if (!debugEl) {
         console.error("⚠️ #video-timeline-debug element missing from index.html!");
@@ -117,9 +117,9 @@ function attachDebugTimeline(videoEl, id, mediaType, season, episode) {
     debugEl.style.color = '#aaa';
     debugEl.textContent = '⏳ Loading video metadata...';
     
-    // 🎯 Load and display saved timestamp
+    // 🎯 Load and display saved timestamp (only if autoResume is enabled)
     const savedTimestamp = loadVideoTimestamp(id, mediaType, season, episode);
-    if (savedTimestamp > 0) {
+    if (savedTimestamp > 0 && autoResume) {
         debugEl.innerHTML += `<br>📍 Last position: ${formatTime(savedTimestamp)} (will auto-resume)`;
         
         // Auto-resume after metadata loads
@@ -129,6 +129,8 @@ function attachDebugTimeline(videoEl, id, mediaType, season, episode) {
                 debugEl.innerHTML += ` ✅ Resumed!`;
             }, 500);
         });
+    } else if (savedTimestamp > 0 && !autoResume) {
+        debugEl.innerHTML += `<br>💾 Saved position: ${formatTime(savedTimestamp)} (starting fresh)`;
     }
     
     // 1. Update as soon as duration/size is known
@@ -193,7 +195,7 @@ function setVideoSource(id, mediaType, season, episode, url) {
             videoEl.autoplay = true;
             videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
             container.appendChild(videoEl);
-            attachDebugTimeline(videoEl, id, mediaType, season, episode);
+            attachDebugTimeline(videoEl, id, mediaType, season, episode, true);
         } else {
             iframe.src = alternateUrl;
             iframe.style.display = 'block';
@@ -961,7 +963,7 @@ async function navigateEpisode(direction) {
         videoEl.autoplay = true;
         videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
         container.appendChild(videoEl);
-        attachDebugTimeline(videoEl, id, mediaType, season, episode);
+        attachDebugTimeline(videoEl, id, mediaType, season, episode, false);
     } else {
         // 🖼️ Iframe (Alternate or Default)
         const iframe = document.createElement('iframe');
