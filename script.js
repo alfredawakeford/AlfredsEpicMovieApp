@@ -55,6 +55,45 @@ async function loadTvAlternateLinks() {
     } catch (e) { console.warn('tvlinks.csv load failed:', e); }
 }
 
+// 💾 Save video timestamp to localStorage
+function saveVideoTimestamp(id, mediaType, season, episode, timestamp) {
+    const key = `videoProgress_${mediaType}_${id}_${season || 0}_${episode || 0}`;
+    localStorage.setItem(key, timestamp.toString());
+    console.log(`💾 Saved timestamp: ${formatTime(timestamp)} for ${key}`);
+}
+
+// 📥 Load video timestamp from localStorage
+function loadVideoTimestamp(id, mediaType, season, episode) {
+    const key = `videoProgress_${mediaType}_${id}_${season || 0}_${episode || 0}`;
+    const saved = localStorage.getItem(key);
+    return saved ? parseFloat(saved) : 0;
+}
+
+// 🎯 Attach timestamp saving to video element
+function attachTimestampSaving(videoEl, id, mediaType, season, episode) {
+    let lastSavedTime = 0;
+    
+    // Save every 5 seconds during playback
+    videoEl.addEventListener('timeupdate', () => {
+        const currentTime = videoEl.currentTime;
+        // Only save if progressed at least 5 seconds from last save
+        if (currentTime - lastSavedTime >= 5) {
+            saveVideoTimestamp(id, mediaType, season, episode, currentTime);
+            lastSavedTime = currentTime;
+        }
+    });
+    
+    // Save before video ends
+    videoEl.addEventListener('ended', () => {
+        saveVideoTimestamp(id, mediaType, season, episode, videoEl.duration);
+    });
+    
+    // Save when user pauses
+    videoEl.addEventListener('pause', () => {
+        saveVideoTimestamp(id, mediaType, season, episode, videoEl.currentTime);
+    });
+}
+
 // 🕒 Helper: Format seconds to HH:MM:SS or MM:SS
 function formatTime(seconds) {
     if (!seconds || isNaN(seconds)) return "00:00";
@@ -67,7 +106,7 @@ function formatTime(seconds) {
 }
 
 // 🔍 Attach debug timeline listener to a <video> element
-function attachDebugTimeline(videoEl) {
+function attachDebugTimeline(videoEl, id, mediaType, season, episode) {
     const debugEl = document.getElementById('video-timeline-debug');
     if (!debugEl) {
         console.error("⚠️ #video-timeline-debug element missing from index.html!");
@@ -77,19 +116,35 @@ function attachDebugTimeline(videoEl) {
     debugEl.style.display = 'block';
     debugEl.style.color = '#aaa';
     debugEl.textContent = '⏳ Loading video metadata...';
-
+    
+    // 🎯 Load and display saved timestamp
+    const savedTimestamp = loadVideoTimestamp(id, mediaType, season, episode);
+    if (savedTimestamp > 0) {
+        debugEl.innerHTML += `<br>📍 Last position: ${formatTime(savedTimestamp)} (will auto-resume)`;
+        
+        // Auto-resume after metadata loads
+        videoEl.addEventListener('loadedmetadata', () => {
+            setTimeout(() => {
+                videoEl.currentTime = savedTimestamp;
+                debugEl.innerHTML += ` ✅ Resumed!`;
+            }, 500);
+        });
+    }
+    
     // 1. Update as soon as duration/size is known
     videoEl.addEventListener('loadedmetadata', () => {
         const current = formatTime(videoEl.currentTime);
         const duration = formatTime(videoEl.duration);
-        debugEl.textContent = `🔍 Debug: ${current} / ${duration} | Raw: ${videoEl.currentTime.toFixed(2)}s`;
+        const saved = loadVideoTimestamp(id, mediaType, season, episode);
+        debugEl.innerHTML = `🔍 Debug: ${current} / ${duration} | Raw: ${videoEl.currentTime.toFixed(2)}s<br>💾 Saved: ${formatTime(saved)}`;
     });
 
     // 2. Update continuously during playback
     videoEl.addEventListener('timeupdate', () => {
         const current = formatTime(videoEl.currentTime);
         const duration = formatTime(videoEl.duration);
-        debugEl.textContent = `🔍 Debug: ${current} / ${duration} | Raw: ${videoEl.currentTime.toFixed(2)}s`;
+        const saved = loadVideoTimestamp(id, mediaType, season, episode);
+        debugEl.innerHTML = `🔍 Debug: ${current} / ${duration} | Raw: ${videoEl.currentTime.toFixed(2)}s<br>💾 Saved: ${formatTime(saved)}`;
     });
 
     // 3. Catch playback errors
@@ -97,6 +152,9 @@ function attachDebugTimeline(videoEl) {
         debugEl.style.color = '#e50914';
         debugEl.textContent = `❌ Video Error: ${videoEl.error?.message || 'Failed to load source'}`;
     });
+    
+    // 4. Attach timestamp saving
+    attachTimestampSaving(videoEl, id, mediaType, season, episode);
 }
 
 function getAlternateLink(id, mediaType) {
@@ -135,7 +193,7 @@ function setVideoSource(id, mediaType, season, episode, url) {
             videoEl.autoplay = true;
             videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
             container.appendChild(videoEl);
-            attachDebugTimeline(videoEl);
+            attachDebugTimeline(videoEl, id, mediaType, season, episode);
         } else {
             iframe.src = alternateUrl;
             iframe.style.display = 'block';
@@ -903,7 +961,7 @@ async function navigateEpisode(direction) {
         videoEl.autoplay = true;
         videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
         container.appendChild(videoEl);
-        attachDebugTimeline(videoEl);
+        attachDebugTimeline(videoEl, id, mediaType, season, episode);
     } else {
         // 🖼️ Iframe (Alternate or Default)
         const iframe = document.createElement('iframe');
@@ -942,25 +1000,43 @@ function updateButtonStates() {
 }
 
 function closeVideoModal() {
+    const modal = document.getElementById("videoModal");
+    const container = document.querySelector(".video-container");
+    const videoEl = document.getElementById("videoPlayer");
+    
+    // 💾 Save timestamp if it's an MP4 video
+    if (videoEl && currentVideoState.id) {
+        const currentTime = videoEl.currentTime;
+        if (currentTime > 10) { // Only save if watched more than 10 seconds
+            saveVideoTimestamp(
+                currentVideoState.id, 
+                currentVideoState.mediaType, 
+                currentVideoState.season, 
+                currentVideoState.episode, 
+                currentTime
+            );
+        }
+    }
+    
+    if (modal) modal.style.display = "none";
+    if (container) container.innerHTML = ''; 
+    
+    // Clear debug timeline
     const debugEl = document.getElementById('video-timeline-debug');
     if (debugEl) {
         debugEl.textContent = '';
         debugEl.style.display = 'none';
         debugEl.style.color = '#aaa';
     }
-    const modal = document.getElementById("videoModal");
-    const container = document.querySelector(".video-container"); // ✅ Target container
-    
-    if (modal) modal.style.display = "none";
-    
-    // ✅ Clear all content (video or iframe)
-    if (container) container.innerHTML = ''; 
-    
+
     document.body.style.overflow = "";
     const controls = document.getElementById("videoControls");
     if (controls) controls.remove();
-    
-    currentVideoState = { id: null, mediaType: null, season: null, episode: null, itemTitle: null, totalEpisodesInSeason: 0, totalSeasons: 0 };
+
+    currentVideoState = { 
+        id: null, mediaType: null, season: null, episode: null, 
+        itemTitle: null, totalEpisodesInSeason: 0, totalSeasons: 0 
+    };
 
     if (document.getElementById("home-tab")?.classList.contains("active")) {
         displayContinueWatching();
