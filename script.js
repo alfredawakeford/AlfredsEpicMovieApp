@@ -55,6 +55,30 @@ async function loadTvAlternateLinks() {
     } catch (e) { console.warn('tvlinks.csv load failed:', e); }
 }
 
+// 🕒 Helper: Format seconds to HH:MM:SS or MM:SS
+function formatTime(seconds) {
+    if (!seconds || isNaN(seconds)) return "00:00";
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    return h > 0 
+        ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+        : `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+// 🔍 Attach debug timeline listener to a <video> element
+function attachDebugTimeline(videoEl) {
+    const debugEl = document.getElementById('video-timeline-debug');
+    if (!debugEl) return;
+    debugEl.style.display = 'block';
+
+    videoEl.addEventListener('timeupdate', () => {
+        const current = formatTime(videoEl.currentTime);
+        const duration = formatTime(videoEl.duration);
+        debugEl.textContent = `🔍 Debug: ${current} / ${duration} | Raw: ${videoEl.currentTime.toFixed(2)}s`;
+    });
+}
+
 function getAlternateLink(id, mediaType) {
     if (mediaType === 'movie') {
         return alternateLinks.get(String(id)) || null;
@@ -91,6 +115,7 @@ function setVideoSource(id, mediaType, season, episode, url) {
             videoEl.autoplay = true;
             videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
             container.appendChild(videoEl);
+            attachDebugTimeline(videoEl);
         } else {
             iframe.src = alternateUrl;
             iframe.style.display = 'block';
@@ -858,6 +883,7 @@ async function navigateEpisode(direction) {
         videoEl.autoplay = true;
         videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
         container.appendChild(videoEl);
+        attachDebugTimeline(videoEl);
     } else {
         // 🖼️ Iframe (Alternate or Default)
         const iframe = document.createElement('iframe');
@@ -903,6 +929,12 @@ function closeVideoModal() {
     
     // ✅ Clear all content (video or iframe)
     if (container) container.innerHTML = ''; 
+
+    const debugEl = document.getElementById('video-timeline-debug');
+    if (debugEl) {
+        debugEl.textContent = '';
+        debugEl.style.display = 'none';
+    }
     
     document.body.style.overflow = "";
     const controls = document.getElementById("videoControls");
