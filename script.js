@@ -159,16 +159,22 @@ function getTvAlternateLink(id, season, episode) {
 }
 
 // Helper: Sets video source (checks alternate links, handles .mp4 vs iframe)
-function setVideoSource(id, mediaType, season, episode, url, autoResume = true) {
+function setVideoSource(id, mediaType, season, episode, url) {
     const container = document.querySelector(".video-container");
     if (!container) return;
-    container.innerHTML = ''; // Clear previous player/debug
 
-    let alternateUrl = (mediaType === 'tv' && season && episode)
-        ? getTvAlternateLink(id, season, episode)
-        : (mediaType === 'movie' ? getAlternateLink(id, mediaType) : null);
+    let alternateUrl = null;
+    if (mediaType === 'tv' && season && episode) {
+        alternateUrl = getTvAlternateLink(id, season, episode);
+    } else if (mediaType === 'movie') {
+        alternateUrl = getAlternateLink(id, mediaType);
+    }
+
+    // Clear the container before loading new content
+    container.innerHTML = '';
 
     if (alternateUrl && alternateUrl.toLowerCase().endsWith('.mp4')) {
+        // --- DIRECT MP4 PLAYBACK ---
         const videoEl = document.createElement('video');
         videoEl.id = 'videoPlayer';
         videoEl.src = alternateUrl;
@@ -176,9 +182,35 @@ function setVideoSource(id, mediaType, season, episode, url, autoResume = true) 
         videoEl.autoplay = true;
         videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
         container.appendChild(videoEl);
-        attachDebugTimeline(videoEl, id, mediaType, season, episode, autoResume);
+
+        // 🎬 AUTO-REMOVE MOVIE FROM CONTINUE WATCHING
+        if (mediaType === 'movie') {
+            let movieFinished = false;
+            
+            const checkCompletion = () => {
+                // Only proceed if duration is known and not already removed
+                if (!movieFinished && videoEl.duration > 0) {
+                    // Check if 90% reached OR video ended
+                    const progress = videoEl.currentTime / videoEl.duration;
+                    if (progress >= 0.90 || videoEl.ended) {
+                        movieFinished = true;
+                        console.log(`🎬 Movie '${id}' completed (90%+). Removing from Continue Watching.`);
+                        
+                        // Remove from data and refresh UI
+                        removeFromWatched(id, mediaType);
+                        displayContinueWatching();
+                    }
+                }
+            };
+
+            // Check continuously during playback and specifically when the video ends
+            videoEl.addEventListener('timeupdate', checkCompletion);
+            videoEl.addEventListener('ended', checkCompletion);
+        }
     } else {
-        // ✅ FIX: Clean iframe creation for vidsrc fallback
+        // --- IFRAME FALLBACK (vidsrc, etc.) ---
+        // Note: Browsers block reading video timestamps from external iframes (CORS).
+        // Auto-removal only works for direct .mp4 links.
         const iframe = document.createElement('iframe');
         iframe.id = 'videoFrame';
         iframe.allowFullscreen = true;
