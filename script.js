@@ -55,6 +55,7 @@ async function loadTvAlternateLinks() {
     } catch (e) { console.warn('tvlinks.csv load failed:', e); }
 }
 
+
 function formatTime(seconds) {
     if (!seconds || isNaN(seconds)) return "00:00";
     const h = Math.floor(seconds / 3600);
@@ -63,6 +64,29 @@ function formatTime(seconds) {
     return h > 0 
         ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
         : `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+// 🗑️ Clear video timestamp from localStorage
+function clearVideoTimestamp(id, mediaType, season, episode) {
+    const key = `videoProgress_${mediaType}_${id}_${season || 0}_${episode || 0}`;
+    localStorage.removeItem(key);
+    console.log(`🗑️ Cleared timestamp: ${key}`);
+}
+
+// 🔍 Clear ALL timestamps for a specific item (useful for movies or when season/episode unknown)
+function clearAllTimestampsForItem(id, mediaType) {
+    const watched = getWatchedData();
+    const itemKey = `${mediaType}_${id}`;
+    const item = watched[itemKey];
+    
+    if (item) {
+        // Clear the current episode's timestamp
+        if (item.currentSeason && item.currentEpisode) {
+            clearVideoTimestamp(id, mediaType, item.currentSeason, item.currentEpisode);
+        }
+        // Also clear S0E0 as fallback
+        clearVideoTimestamp(id, mediaType, 0, 0);
+    }
 }
 
 function saveVideoTimestamp(id, mediaType, season, episode, timestamp) {
@@ -234,12 +258,23 @@ function updateTVEpisode(id, mediaType, currentSeason, currentEpisode) {
         saveWatchedData(watched);
     }
 }
-function removeFromWatched(id, mediaType) {
+
+function removeFromWatched(id, mediaType, season = null, episode = null) {
     const watched = getWatchedData();
     const key = `${mediaType}_${id}`;
+    
+    // Clear timestamp(s)
+    if (season !== null && episode !== null) {
+        clearVideoTimestamp(id, mediaType, season, episode);
+    } else {
+        // If no season/episode provided, clear all timestamps for this item
+        clearAllTimestampsForItem(id, mediaType);
+    }
+    
     delete watched[key];
     saveWatchedData(watched);
 }
+
 function addToWatchlist(item) {
     const watchlist = getWatchlist();
     const exists = watchlist.find(w => w.id === item.id && w.media_type === item.media_type);
@@ -670,7 +705,19 @@ function toggleWatchlistFromModal(id, mediaType, title, posterPath) {
 }
 
 function removeFromContinueWatching(id, mediaType) {
-    removeFromWatched(id, mediaType);
+    // Get current season/episode if TV
+    const watched = getWatchedData();
+    const key = `${mediaType}_${id}`;
+    const item = watched[key];
+    let season = null;
+    let episode = null;
+    
+    if (item) {
+        season = item.currentSeason;
+        episode = item.currentEpisode;
+    }
+    
+    removeFromWatched(id, mediaType, season, episode);
     document.getElementById("movieModal").style.display = "none";
     displayContinueWatching();
 }
@@ -953,28 +1000,50 @@ function closeVideoModal() {
     const modal = document.getElementById("videoModal");
     const container = document.querySelector(".video-container");
     const videoEl = document.getElementById("videoPlayer");
-
-    //  Save final timestamp
+    
+    // 💾 Save timestamp if it's an MP4 video AND still in Continue Watching
     if (videoEl && currentVideoState.id) {
-        const t = videoEl.currentTime;
-        if (t > 10) saveVideoTimestamp(currentVideoState.id, currentVideoState.mediaType, currentVideoState.season, currentVideoState.episode, t);
+        const currentTime = videoEl.currentTime;
+        const watched = getWatchedData();
+        const key = `${currentVideoState.mediaType}_${currentVideoState.id}`;
+        const isInWatched = watched[key] !== undefined;
+        
+        // Only save if still in Continue Watching and watched more than 10 seconds
+        if (isInWatched && currentTime > 10) {
+            saveVideoTimestamp(
+                currentVideoState.id, 
+                currentVideoState.mediaType, 
+                currentVideoState.season, 
+                currentVideoState.episode, 
+                currentTime
+            );
+        }
     }
-
+    
     if (modal) modal.style.display = "none";
-    if (container) container.innerHTML = '';
-
+    if (container) container.innerHTML = ''; 
+    
+    // Clear debug timeline
     const debugEl = document.getElementById('video-timeline-debug');
-    if (debugEl) { debugEl.textContent = ''; debugEl.style.display = 'none'; }
+    if (debugEl) {
+        debugEl.textContent = '';
+        debugEl.style.display = 'none';
+        debugEl.style.color = '#aaa';
+    }
 
     document.body.style.overflow = "";
     const controls = document.getElementById("videoControls");
     if (controls) controls.remove();
 
-    currentVideoState = { id: null, mediaType: null, season: null, episode: null, itemTitle: null, totalEpisodesInSeason: 0, totalSeasons: 0 };
+    currentVideoState = { 
+        id: null, mediaType: null, season: null, episode: null, 
+        itemTitle: null, totalEpisodesInSeason: 0, totalSeasons: 0 
+    };
 
-    if (document.getElementById("home-tab")?.classList.contains("active")) displayContinueWatching();
+    if (document.getElementById("home-tab")?.classList.contains("active")) {
+        displayContinueWatching();
+    }
 }
-
 document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
         closeVideoModal();
