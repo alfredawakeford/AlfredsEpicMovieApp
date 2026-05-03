@@ -770,39 +770,21 @@ function openTrailer(url, title) {
     const controls = document.getElementById('videoControls');
     if (controls) controls.remove();
 
-    // ✅ Normalize YouTube/Vimeo URLs to embed format
-    const embedUrl = normalizeEmbedUrl(url);
-
-    // Direct .mp4 files use <video> tag
-    if (embedUrl.toLowerCase().endsWith('.mp4')) {
+    // Direct .mp4 files use <video> tag, everything else uses iframe
+    if (url.toLowerCase().endsWith('.mp4')) {
         const videoEl = document.createElement('video');
-        videoEl.src = embedUrl;
+        videoEl.src = url;
         videoEl.controls = true;
         videoEl.autoplay = true;
         videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
         container.appendChild(videoEl);
-    } 
-    // Embeddable iframes (YouTube, Vimeo, etc.)
-    else {
+    } else {
         const iframe = document.createElement('iframe');
         iframe.allowFullscreen = true;
         iframe.allow = "autoplay; encrypted-media; picture-in-picture";
         iframe.referrerPolicy = "strict-origin-when-cross-origin";
-        iframe.src = embedUrl;
+        iframe.src = url; // ✅ Use URL as-is from CSV
         iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;';
-        
-        // ✅ Fallback: Show message if embed fails
-        iframe.onerror = () => {
-            container.innerHTML = `
-                <div style="color:white;text-align:center;padding:40px;">
-                    <p>⚠️ Trailer cannot be embedded.</p>
-                    <a href="${url}" target="_blank" style="color:#0d6efd;text-decoration:none;">
-                        ▶ Watch on YouTube instead
-                    </a>
-                </div>
-            `;
-        };
-        
         container.appendChild(iframe);
     }
 }
