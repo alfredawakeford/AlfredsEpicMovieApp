@@ -35,7 +35,7 @@ async function loadAlternateLinks() {
                 alternateLinks.set(tmdbId, links.split('|').map(l => l.trim()).filter(Boolean));
             }
         });
-    } catch (e) { console.warn('movielinks.csv load failed:', e); }
+    } catch (e) { console.warn('movielinks.csv load has failed:', e); }
 }
 
 
