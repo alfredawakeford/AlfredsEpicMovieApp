@@ -57,21 +57,6 @@ async function loadTvAlternateLinks() {
     } catch (e) { console.warn('tvlinks.csv load failed:', e); }
 }
 
-let trailerLinks = new Map();
-
-async function loadTrailerLinks() {
-    try {
-        const res = await fetch('trailers.csv');
-        if (!res.ok) return;
-        const text = await res.text();
-        text.trim().split('\n').forEach((line, i) => {
-            if (i === 0) return;
-            const [id, link] = line.split(',').map(s => s.trim());
-            if (id && link) trailerLinks.set(id, link);
-        });
-    } catch(e) { console.warn('trailers.csv failed:', e); }
-}
-
 // ========== TRAILERDB INTEGRATION ==========
 let trailerCache = new Map(); // Cache: tmdbId_mediaType → trailer embed URL
 
