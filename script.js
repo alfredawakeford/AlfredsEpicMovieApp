@@ -670,7 +670,7 @@ async function showMovieDetails(item, fromContinueWatching = false) {
         if (item.media_type === "movie") {
             if (isInWatched) {
                 actionButtonsHTML = `
-                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
+                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
                         ▶ Play Movie
                     </button>
                     <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
@@ -679,7 +679,7 @@ async function showMovieDetails(item, fromContinueWatching = false) {
                 `;
             } else {
                 actionButtonsHTML = `
-                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
+                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
                         ▶ Play Movie
                     </button>
                     <button class="action-btn" onclick="toggleWatchlistFromModal(${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
@@ -690,7 +690,7 @@ async function showMovieDetails(item, fromContinueWatching = false) {
         } else if (item.media_type === "tv") {
             if (isInWatched && currentSeason && currentEpisode) {
                 actionButtonsHTML = `
-                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/tv/${item.id}/${currentSeason}-${currentEpisode}', '${title} - S${currentSeason}E${currentEpisode}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${currentSeason}, ${currentEpisode})">
+                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${currentSeason}-${currentEpisode}', '${title} - S${currentSeason}E${currentEpisode}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${currentSeason}, ${currentEpisode})">
                         ▶ Play Season ${currentSeason} Episode ${currentEpisode}
                     </button>
                     <div class="tv-action-group">
@@ -704,7 +704,7 @@ async function showMovieDetails(item, fromContinueWatching = false) {
                 `;
             } else {
                 actionButtonsHTML = `
-                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/tv/${item.id}/1-1', '${title} - S1E1', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', 1, 1)">
+                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/1-1', '${title} - S1E1', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', 1, 1)">
                         ▶ Play Season 1 Episode 1
                     </button>
                     <button class="action-btn" onclick="toggleWatchlistFromModal(${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
@@ -821,7 +821,7 @@ async function showMovieDetails(item, fromContinueWatching = false) {
                                         <div class="episode-item ${isCurrentEpisode ? 'current' : ''}">
                                             <div class="episode-actions">
                                                 <button class="episode-play" title="Play episode"
-                                                    onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/tv/${item.id}/${seasonNum}-${ep.episode_number}', '${videoTitle}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${seasonNum}, ${ep.episode_number})">
+                                                    onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${seasonNum}-${ep.episode_number}', '${videoTitle}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${seasonNum}, ${ep.episode_number})">
                                                     ▶
                                                 </button>
                                             </div>
@@ -989,7 +989,7 @@ function updateModalUI(id, mediaType, title, nextSeason, nextEpisode) {
     
     if (modalActions) {
         modalActions.innerHTML = `
-            <button class="play-btn" id="tempPlayBtn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/tv/${id}/${nextSeason}-${nextEpisode}', '${title.replace(/'/g, "\\'")} - S${nextSeason}E${nextEpisode}', ${id}, '${mediaType}', '${title.replace(/'/g, "\\'")}', '${posterPath}', ${nextSeason}, ${nextEpisode})">
+            <button class="play-btn" id="tempPlayBtn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${id}/${nextSeason}-${nextEpisode}', '${title.replace(/'/g, "\\'")} - S${nextSeason}E${nextEpisode}', ${id}, '${mediaType}', '${title.replace(/'/g, "\\'")}', '${posterPath}', ${nextSeason}, ${nextEpisode})">
                 ▶ Play Season ${nextSeason} Episode ${nextEpisode}
             </button>
             <div class="tv-action-group">
@@ -1054,7 +1054,7 @@ function updateModalToUnwatchedState(id, title) {
     
     if (modalActions) {
         modalActions.innerHTML = `
-            <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.ru/embed/tv/${id}/1-1', '${title.replace(/'/g, "\\'")} - S1E1', ${id}, 'tv', '${title.replace(/'/g, "\\'")}', '${posterPath}', 1, 1)">
+            <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${id}/1-1', '${title.replace(/'/g, "\\'")} - S1E1', ${id}, 'tv', '${title.replace(/'/g, "\\'")}', '${posterPath}', 1, 1)">
                 ▶ Play Season 1 Episode 1
             </button>
             <button class="action-btn" onclick="toggleWatchlistFromModal(${id}, 'tv', '${title.replace(/'/g, "\\'")}', '${posterPath}')">
@@ -1170,7 +1170,7 @@ async function navigateEpisode(direction) {
     container.innerHTML = '';
 
     let links = getTvAlternateLink(id, s, e);
-    const defaultSrc = `https://vidsrc-embed.ru/embed/tv/${id}/${s}-${e}`;
+    const defaultSrc = `https://vidsrc-embed.su/embed/tv/${id}/${s}-${e}`;
 
     if (links && links.length > 0 && links[0].toLowerCase().endsWith('.mp4')) {
         currentPlaybackLinks = links;
