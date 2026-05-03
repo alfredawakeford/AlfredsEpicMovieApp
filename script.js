@@ -57,6 +57,20 @@ async function loadTvAlternateLinks() {
     } catch (e) { console.warn('tvlinks.csv load failed:', e); }
 }
 
+let trailerLinks = new Map();
+
+async function loadTrailerLinks() {
+    try {
+        const res = await fetch('trailers.csv');
+        if (!res.ok) return;
+        const text = await res.text();
+        text.trim().split('\n').forEach((line, i) => {
+            if (i === 0) return;
+            const [id, link] = line.split(',').map(s => s.trim());
+            if (id && link) trailerLinks.set(id, link);
+        });
+    } catch(e) { console.warn('trailers.csv failed:', e); }
+}
 
 function formatTime(seconds) {
     if (!seconds || isNaN(seconds)) return "00:00";
@@ -634,6 +648,12 @@ async function showMovieDetails(item, fromContinueWatching = false) {
             }
         }
         
+        const trailerUrl = trailerLinks.get(String(item.id));
+        if (trailerUrl) {
+            const tTitle = `${data.title || data.name} Trailer`.replace(/'/g, "\\'");
+            actionButtonsHTML += `<button class="trailer-btn" onclick="openTrailer('${trailerUrl}', '${tTitle}')">🎬 Play Trailer</button>`;
+        }
+        
         let modalHTML = `
             ${data.poster_path ? `<img class="modal-poster" src="https://image.tmdb.org/t/p/w500${data.poster_path}" alt="${title}">` : ""}
             <h2 class="modal-title">${title} (${year})</h2>
@@ -730,6 +750,40 @@ async function showMovieDetails(item, fromContinueWatching = false) {
     } catch (error) {
         console.error("Error fetching details:", error);
         modalBody.innerHTML = "<p>Failed to load details. Please try again.</p>";
+    }
+}
+
+function openTrailer(url, title) {
+    const modal = document.getElementById("videoModal");
+    const titleEl = document.getElementById("videoTitle");
+    const container = document.querySelector(".video-container");
+    if (!modal || !container) return;
+
+    modal.style.display = "block";
+    titleEl.textContent = title || "Trailer";
+    document.body.style.overflow = "hidden";
+    container.innerHTML = ''; // Clear previous player
+
+    // Hide debug & episode controls
+    const debugEl = document.getElementById('video-timeline-debug');
+    if (debugEl) debugEl.style.display = 'none';
+    const controls = document.getElementById('videoControls');
+    if (controls) controls.remove();
+
+    // Smart renderer: iframe for embeds, <video> for direct mp4
+    if (url.toLowerCase().endsWith('.mp4')) {
+        const videoEl = document.createElement('video');
+        videoEl.src = url;
+        videoEl.controls = true;
+        videoEl.autoplay = true;
+        videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
+        container.appendChild(videoEl);
+    } else {
+        const iframe = document.createElement('iframe');
+        iframe.allowFullscreen = true;
+        iframe.src = url;
+        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;';
+        container.appendChild(iframe);
     }
 }
 
@@ -1177,6 +1231,7 @@ function displayNewAdditions(items, clear = true) {
 document.addEventListener("DOMContentLoaded", () => {
     loadAlternateLinks();
     loadTvAlternateLinks();
+    loadTrailerLinks();
     displayContinueWatching();
     loadNewAdditions();
     
