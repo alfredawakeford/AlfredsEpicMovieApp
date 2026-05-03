@@ -762,27 +762,47 @@ function openTrailer(url, title) {
     modal.style.display = "block";
     titleEl.textContent = title || "Trailer";
     document.body.style.overflow = "hidden";
-    container.innerHTML = ''; // Clear previous player
+    container.innerHTML = '';
 
-    // Hide debug & episode controls
+    // Hide debug & episode controls for trailers
     const debugEl = document.getElementById('video-timeline-debug');
     if (debugEl) debugEl.style.display = 'none';
     const controls = document.getElementById('videoControls');
     if (controls) controls.remove();
 
-    // Smart renderer: iframe for embeds, <video> for direct mp4
-    if (url.toLowerCase().endsWith('.mp4')) {
+    // ✅ Normalize YouTube/Vimeo URLs to embed format
+    const embedUrl = normalizeEmbedUrl(url);
+
+    // Direct .mp4 files use <video> tag
+    if (embedUrl.toLowerCase().endsWith('.mp4')) {
         const videoEl = document.createElement('video');
-        videoEl.src = url;
+        videoEl.src = embedUrl;
         videoEl.controls = true;
         videoEl.autoplay = true;
         videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
         container.appendChild(videoEl);
-    } else {
+    } 
+    // Embeddable iframes (YouTube, Vimeo, etc.)
+    else {
         const iframe = document.createElement('iframe');
         iframe.allowFullscreen = true;
-        iframe.src = url;
+        iframe.allow = "autoplay; encrypted-media; picture-in-picture";
+        iframe.referrerPolicy = "strict-origin-when-cross-origin";
+        iframe.src = embedUrl;
         iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;';
+        
+        // ✅ Fallback: Show message if embed fails
+        iframe.onerror = () => {
+            container.innerHTML = `
+                <div style="color:white;text-align:center;padding:40px;">
+                    <p>⚠️ Trailer cannot be embedded.</p>
+                    <a href="${url}" target="_blank" style="color:#0d6efd;text-decoration:none;">
+                        ▶ Watch on YouTube instead
+                    </a>
+                </div>
+            `;
+        };
+        
         container.appendChild(iframe);
     }
 }
