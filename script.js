@@ -15,6 +15,9 @@ let currentVideoState = {
 const STORAGE_WATCHED = "movieBrowser_watched";
 const STORAGE_WATCHLIST = "movieBrowser_watchlist";
 
+let currentPlaybackLinks = [];
+let currentLinkIndex = 0;
+
 // ========== ALTERNATE VIDEO LINKS ==========
 let alternateLinks = new Map();
 let tvAlternateLinks = new Map();
@@ -25,12 +28,11 @@ async function loadAlternateLinks() {
         if (!response.ok) return;
         const csvText = await response.text();
         const lines = csvText.trim().split('\n');
-        
         lines.forEach((line, index) => {
             if (index === 0) return;
-            const [tmdbId, embedUrl] = line.split(',').map(s => s.trim());
-            if (tmdbId && embedUrl) {
-                alternateLinks.set(tmdbId, embedUrl);
+            const [tmdbId, links] = line.split(',').map(s => s.trim());
+            if (tmdbId && links) {
+                alternateLinks.set(tmdbId, links.split('|').map(s => s.trim()).filter(Boolean));
             }
         });
     } catch (e) { console.warn('movielinks.csv load failed:', e); }
@@ -42,19 +44,17 @@ async function loadTvAlternateLinks() {
         if (!response.ok) return;
         const csvText = await response.text();
         const lines = csvText.trim().split('\n');
-        
         lines.forEach((line, index) => {
             if (index === 0) return;
             const parts = line.split(',').map(s => s.trim());
             if (parts.length >= 4) {
-                const [id, season, episode, embedUrl] = parts;
+                const [id, season, episode, links] = parts;
                 const key = `${id}_${season}_${episode}`;
-                tvAlternateLinks.set(key, embedUrl);
+                tvAlternateLinks.set(key, links.split('|').map(s => s.trim()).filter(Boolean));
             }
         });
     } catch (e) { console.warn('tvlinks.csv load failed:', e); }
 }
-
 
 function formatTime(seconds) {
     if (!seconds || isNaN(seconds)) return "00:00";
@@ -171,34 +171,60 @@ function getTvAlternateLink(id, season, episode) {
     return tvAlternateLinks.get(key) || null;
 }
 
-// Helper: Sets video source (checks alternate links, handles .mp4 vs iframe)
+function renderVideoPlayer(src, id, mediaType, season, episode, autoResume) {
+    const container = document.querySelector(".video-container");
+    if (!container) return;
+    container.innerHTML = '';
+
+    const videoEl = document.createElement('video');
+    videoEl.id = 'videoPlayer';
+    videoEl.src = src;
+    videoEl.controls = true;
+    videoEl.autoplay = true;
+    videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
+    container.appendChild(videoEl);
+    
+    // Keep your debug & timestamp logic
+    attachDebugTimeline(videoEl, id, mediaType, season, episode, autoResume);
+
+    // Add fallback button if more links exist
+    if (currentPlaybackLinks.length > 1 && currentLinkIndex < currentPlaybackLinks.length - 1) {
+        const btn = document.createElement('button');
+        btn.className = 'fallback-link-btn';
+        btn.textContent = '⚠️ This is not loading';
+        btn.onclick = () => {
+            currentLinkIndex++;
+            renderVideoPlayer(currentPlaybackLinks[currentLinkIndex], id, mediaType, season, episode, true);
+        };
+        container.appendChild(btn);
+    }
+}
+
 function setVideoSource(id, mediaType, season, episode, url, autoResume = true) {
     const container = document.querySelector(".video-container");
     if (!container) return;
-    container.innerHTML = ''; // Clear previous player/debug
+    container.innerHTML = '';
 
-    let alternateUrl = (mediaType === 'tv' && season && episode)
+    let links = (mediaType === 'tv' && season && episode)
         ? getTvAlternateLink(id, season, episode)
         : (mediaType === 'movie' ? getAlternateLink(id, mediaType) : null);
 
-    if (alternateUrl && alternateUrl.toLowerCase().endsWith('.mp4')) {
-        const videoEl = document.createElement('video');
-        videoEl.id = 'videoPlayer';
-        videoEl.src = alternateUrl;
-        videoEl.controls = true;
-        videoEl.autoplay = true;
-        videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
-        container.appendChild(videoEl);
-        attachDebugTimeline(videoEl, id, mediaType, season, episode, autoResume);
-    } else {
-        // ✅ FIX: Clean iframe creation for vidsrc fallback
+    // Normalize to array (handles old single-link CSVs automatically)
+    if (typeof links === 'string') links = [links];
+    if (!links || links.length === 0) {
         const iframe = document.createElement('iframe');
         iframe.id = 'videoFrame';
         iframe.allowFullscreen = true;
-        iframe.src = alternateUrl || url;
+        iframe.src = url;
         iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;';
         container.appendChild(iframe);
+        currentPlaybackLinks = [];
+        return;
     }
+
+    currentPlaybackLinks = links;
+    currentLinkIndex = 0;
+    renderVideoPlayer(links[0], id, mediaType, season, episode, autoResume);
 }
 // ========== TAB NAVIGATION ==========
 document.querySelectorAll(".tab-btn").forEach(btn => {
@@ -968,24 +994,22 @@ async function navigateEpisode(direction) {
     const defaultSrc = `https://vidsrc-embed.ru/embed/tv/${id}/${s}-${e}`;
     const alternateUrl = getTvAlternateLink(id, s, e);
 
-    if (alternateUrl && alternateUrl.toLowerCase().endsWith('.mp4')) {
-        const videoEl = document.createElement('video');
-        videoEl.id = 'videoPlayer';
-        videoEl.src = alternateUrl;
-        videoEl.controls = true;
-        videoEl.autoplay = true;
-        videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
-        container.appendChild(videoEl);
-        attachDebugTimeline(videoEl, id, currentVideoState.mediaType, s, e, false); // Next/Prev = 0:00 start
+    let links = getTvAlternateLink(id, s, e);
+    if (typeof links === 'string') links = [links];
+
+    if (links && links.length > 0) {
+        currentPlaybackLinks = links;
+        currentLinkIndex = 0;
+        renderVideoPlayer(links[0], id, currentVideoState.mediaType, s, e, false);
     } else {
         const iframe = document.createElement('iframe');
         iframe.id = 'videoFrame';
         iframe.allowFullscreen = true;
-        iframe.src = alternateUrl || defaultSrc;
+        iframe.src = `https://vidsrc-embed.ru/embed/tv/${id}/${s}-${e}`;
         iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;';
         container.appendChild(iframe);
     }
-
+    
     // ✅ FIX: Immediate title update + async episode name fetch
     const titleEl = document.getElementById("videoTitle");
     titleEl.textContent = `${currentVideoState.itemTitle} - S${s}E${e}`;
