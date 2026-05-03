@@ -15,6 +15,7 @@ let currentVideoState = {
 const STORAGE_WATCHED = "movieBrowser_watched";
 const STORAGE_WATCHLIST = "movieBrowser_watchlist";
 
+
 let currentPlaybackLinks = [];
 let currentLinkIndex = 0;
 
