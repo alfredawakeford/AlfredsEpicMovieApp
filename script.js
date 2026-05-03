@@ -89,6 +89,19 @@ function clearAllTimestampsForItem(id, mediaType) {
     }
 }
 
+// 🗑️ Clears ALL videoProgress_* keys from localStorage
+function clearAllVideoProgressKeys() {
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('videoProgress_')) {
+            keysToRemove.push(key);
+        }
+    }
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+    console.log(`🗑️ Cleared ${keysToRemove.length} video progress entries.`);
+}
+
 function saveVideoTimestamp(id, mediaType, season, episode, timestamp) {
     const key = `videoProgress_${mediaType}_${id}_${season || 0}_${episode || 0}`;
     localStorage.setItem(key, timestamp.toString());
@@ -211,6 +224,8 @@ document.getElementById("clearMoviesFromWatching")?.addEventListener("click", ()
         let removedCount = 0;
         for (const key in watched) {
             if (watched[key].media_type === "movie") {
+                // 👈 Clear timestamps BEFORE deleting from watched list
+                clearAllTimestampsForItem(watched[key].id, watched[key].media_type);
                 delete watched[key];
                 removedCount++;
             }
@@ -401,6 +416,7 @@ document.getElementById("clearData")?.addEventListener("click", () => {
     if (confirm("Are you sure? This will delete all watch history and watchlist!")) {
         localStorage.removeItem(STORAGE_WATCHED);
         localStorage.removeItem(STORAGE_WATCHLIST);
+        clearAllVideoProgressKeys(); // 👈 Purges all videoProgress_* keys
         displayContinueWatching();
         displayWatchlist();
         alert("All data cleared!");
@@ -410,6 +426,7 @@ document.getElementById("clearData")?.addEventListener("click", () => {
 document.getElementById("clearContinueWatching")?.addEventListener("click", () => {
     if (confirm("Are you sure you want to clear all Continue Watching items?")) {
         localStorage.removeItem(STORAGE_WATCHED);
+        clearAllVideoProgressKeys(); // 👈 Purges all videoProgress_* keys
         displayContinueWatching();
         alert("Continue Watching cleared!");
     }
