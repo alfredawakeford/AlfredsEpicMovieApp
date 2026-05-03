@@ -72,6 +72,62 @@ async function loadTrailerLinks() {
     } catch(e) { console.warn('trailers.csv failed:', e); }
 }
 
+// ========== TRAILERDB INTEGRATION ==========
+let trailerCache = new Map(); // Cache: tmdbId_mediaType → trailer embed URL
+
+// Fetch IMDB ID from TMDB API
+async function getImdbId(tmdbId, mediaType) {
+    try {
+        const endpoint = mediaType === 'movie' ? 'movie' : 'tv';
+        const res = await fetch(`https://api.themoviedb.org/3/${endpoint}/${tmdbId}?api_key=${apiKey}&language=en-US`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.imdb_id || null; // TMDB returns "tt1234567" format
+    } catch (e) {
+        console.warn(`Failed to fetch IMDB ID for ${mediaType} ${tmdbId}:`, e);
+        return null;
+    }
+}
+
+// Fetch trailer URL from trailerdb.org
+async function getTrailerFromTrailerDb(imdbId) {
+    try {
+        // TMDB returns "tt1234567", trailerdb expects same format
+        const url = `https://trailerdb.org/data/movie/${imdbId}.json`;
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const data = await res.json();
+        
+        // Extract embed URL - adjust field name based on actual trailerdb response structure
+        // Common patterns: data.trailer, data.embed_url, data.youtube_embed, etc.
+        return data.trailer || data.embed_url || data.youtube_embed || data.url || null;
+    } catch (e) {
+        console.warn(`Failed to fetch trailer for IMDB ${imdbId}:`, e);
+        return null;
+    }
+}
+
+// Main function: Get trailer URL for any TMDB item
+async function fetchTrailerUrl(tmdbId, mediaType) {
+    const cacheKey = `${tmdbId}_${mediaType}`;
+    
+    // Return cached result if available
+    if (trailerCache.has(cacheKey)) {
+        return trailerCache.get(cacheKey);
+    }
+    
+    // Fetch IMDB ID → Trailer
+    const imdbId = await getImdbId(tmdbId, mediaType);
+    if (!imdbId) {
+        trailerCache.set(cacheKey, null);
+        return null;
+    }
+    
+    const trailerUrl = await getTrailerFromTrailerDb(imdbId);
+    trailerCache.set(cacheKey, trailerUrl || null);
+    return trailerUrl;
+}
+
 function formatTime(seconds) {
     if (!seconds || isNaN(seconds)) return "00:00";
     const h = Math.floor(seconds / 3600);
@@ -648,11 +704,31 @@ async function showMovieDetails(item, fromContinueWatching = false) {
             }
         }
         
-        const trailerUrl = trailerLinks.get(String(item.id));
-        if (trailerUrl) {
-            const tTitle = `${data.title || data.name} Trailer`.replace(/'/g, "\\'");
-            actionButtonsHTML += `<button class="trailer-btn" onclick="openTrailer('${trailerUrl}', '${tTitle}')">🎬 Play Trailer</button>`;
-        }
+        // ✅ Async trailer button injection
+        (async () => {
+            const trailerBtnContainer = document.createElement('div');
+            trailerBtnContainer.id = 'trailer-btn-container';
+            trailerBtnContainer.style.textAlign = 'center';
+            trailerBtnContainer.style.margin = '10px 0';
+            modalBody.appendChild(trailerBtnContainer);
+            
+            // Show loading state
+            trailerBtnContainer.innerHTML = '<button class="action-btn" disabled>🎬 Loading trailer...</button>';
+            
+            // Fetch and render trailer button
+            const trailerUrl = await fetchTrailerUrl(item.id, item.media_type);
+            
+            if (trailerUrl) {
+                const safeTitle = (data.title || data.name || 'Trailer').replace(/'/g, "\\'");
+                trailerBtnContainer.innerHTML = `
+                    <button class="trailer-btn" onclick="openTrailer('${trailerUrl}', '${safeTitle} - Trailer')">
+                        🎬 Play Trailer
+                    </button>
+                `;
+            } else {
+                trailerBtnContainer.innerHTML = ''; // Hide if no trailer
+            }
+        })();
         
         let modalHTML = `
             ${data.poster_path ? `<img class="modal-poster" src="https://image.tmdb.org/t/p/w500${data.poster_path}" alt="${title}">` : ""}
@@ -770,7 +846,7 @@ function openTrailer(url, title) {
     const controls = document.getElementById('videoControls');
     if (controls) controls.remove();
 
-    // Direct .mp4 files use <video> tag
+    // Direct .mp4 files use <video> tag, everything else uses iframe
     if (url.toLowerCase().endsWith('.mp4')) {
         const videoEl = document.createElement('video');
         videoEl.src = url;
@@ -778,9 +854,7 @@ function openTrailer(url, title) {
         videoEl.autoplay = true;
         videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
         container.appendChild(videoEl);
-    } 
-    // Embed iframes (YouTube, Vimeo, etc.)
-    else {
+    } else {
         const iframe = document.createElement('iframe');
         iframe.allowFullscreen = true;
         iframe.allow = "autoplay; encrypted-media; picture-in-picture; clipboard-write";
@@ -790,50 +864,31 @@ function openTrailer(url, title) {
         iframe.src = url;
         iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;background:#000;';
         
-        // ✅ Fallback: Show message if embed fails to load within 5 seconds
+        // Fallback message if iframe fails
         let loadTimeout = setTimeout(() => {
             if (!iframe._loaded) {
                 container.innerHTML = `
                     <div style="color:white;text-align:center;padding:40px;font-family:sans-serif;">
                         <p style="font-size:18px;margin-bottom:20px;">⚠️ Trailer cannot be embedded.</p>
-                        <p style="color:#888;font-size:14px;margin-bottom:25px;">
-                            This may be due to YouTube restrictions or browser privacy settings.
-                        </p>
-                        <a href="${url.replace('/embed/', '/watch?v=')}" target="_blank" 
+                        <a href="${url}" target="_blank" 
                            style="background:#e50914;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block;">
-                            ▶ Watch on YouTube instead
+                            ▶ Watch externally
                         </a>
                     </div>
                 `;
-                console.warn('Trailer iframe failed to load:', url);
             }
         }, 5000);
         
-        // ✅ Mark as loaded when iframe successfully loads
-        iframe.onload = () => {
-            clearTimeout(loadTimeout);
-            iframe._loaded = true;
-            console.log('Trailer iframe loaded:', url);
-        };
-        
-        // ✅ Also catch error events
+        iframe.onload = () => { clearTimeout(loadTimeout); iframe._loaded = true; };
         iframe.onerror = () => {
             clearTimeout(loadTimeout);
-            container.innerHTML = `
-                <div style="color:white;text-align:center;padding:40px;">
-                    <p>⚠️ Failed to load trailer.</p>
-                    <a href="${url.replace('/embed/', '/watch?v=')}" target="_blank" 
-                       style="color:#0d6efd;text-decoration:none;font-weight:500;">
-                        Open on YouTube →
-                    </a>
-                </div>
-            `;
-            console.error('Trailer iframe error:', url);
+            container.innerHTML = `<div style="color:white;text-align:center;padding:40px;">⚠️ Failed to load trailer.<br><a href="${url}" target="_blank" style="color:#0d6efd;">Open externally →</a></div>`;
         };
         
         container.appendChild(iframe);
     }
 }
+
 function toggleWatchlistFromModal(id, mediaType, title, posterPath) {
     const item = { id, media_type: mediaType, title, poster_path: posterPath };
     const watchlist = getWatchlist();
