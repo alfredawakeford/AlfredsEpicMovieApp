@@ -761,3 +761,28 @@ VIDEO PLAYER CONTROLS
 #video-timeline-debug {
     display: none !important;
 }
+
+/* ========================================
+FALLBACK LINK BUTTON
+======================================== */
+.fallback-link-btn {
+    position: absolute;
+    bottom: -42px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 8px 16px;
+    background: #222;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    white-space: nowrap;
+    transition: all 0.2s;
+    z-index: 10;
+}
+.fallback-link-btn:hover {
+    background: #e50914;
+    border-color: #e50914;
+    transform: translateX(-50%) scale(1.05);
+}
