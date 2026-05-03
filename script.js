@@ -770,7 +770,7 @@ function openTrailer(url, title) {
     const controls = document.getElementById('videoControls');
     if (controls) controls.remove();
 
-    // Direct .mp4 files use <video> tag, everything else uses iframe
+    // Direct .mp4 files use <video> tag
     if (url.toLowerCase().endsWith('.mp4')) {
         const videoEl = document.createElement('video');
         videoEl.src = url;
@@ -778,17 +778,62 @@ function openTrailer(url, title) {
         videoEl.autoplay = true;
         videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
         container.appendChild(videoEl);
-    } else {
+    } 
+    // Embed iframes (YouTube, Vimeo, etc.)
+    else {
         const iframe = document.createElement('iframe');
         iframe.allowFullscreen = true;
-        iframe.allow = "autoplay; encrypted-media; picture-in-picture";
+        iframe.allow = "autoplay; encrypted-media; picture-in-picture; clipboard-write";
         iframe.referrerPolicy = "strict-origin-when-cross-origin";
-        iframe.src = url; // ✅ Use URL as-is from CSV
-        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;';
+        iframe.sandbox = "allow-same-origin allow-scripts allow-popups allow-forms allow-modals allow-presentation";
+        iframe.loading = "lazy";
+        iframe.src = url;
+        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;background:#000;';
+        
+        // ✅ Fallback: Show message if embed fails to load within 5 seconds
+        let loadTimeout = setTimeout(() => {
+            if (!iframe._loaded) {
+                container.innerHTML = `
+                    <div style="color:white;text-align:center;padding:40px;font-family:sans-serif;">
+                        <p style="font-size:18px;margin-bottom:20px;">⚠️ Trailer cannot be embedded.</p>
+                        <p style="color:#888;font-size:14px;margin-bottom:25px;">
+                            This may be due to YouTube restrictions or browser privacy settings.
+                        </p>
+                        <a href="${url.replace('/embed/', '/watch?v=')}" target="_blank" 
+                           style="background:#e50914;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block;">
+                            ▶ Watch on YouTube instead
+                        </a>
+                    </div>
+                `;
+                console.warn('Trailer iframe failed to load:', url);
+            }
+        }, 5000);
+        
+        // ✅ Mark as loaded when iframe successfully loads
+        iframe.onload = () => {
+            clearTimeout(loadTimeout);
+            iframe._loaded = true;
+            console.log('Trailer iframe loaded:', url);
+        };
+        
+        // ✅ Also catch error events
+        iframe.onerror = () => {
+            clearTimeout(loadTimeout);
+            container.innerHTML = `
+                <div style="color:white;text-align:center;padding:40px;">
+                    <p>⚠️ Failed to load trailer.</p>
+                    <a href="${url.replace('/embed/', '/watch?v=')}" target="_blank" 
+                       style="color:#0d6efd;text-decoration:none;font-weight:500;">
+                        Open on YouTube →
+                    </a>
+                </div>
+            `;
+            console.error('Trailer iframe error:', url);
+        };
+        
         container.appendChild(iframe);
     }
 }
-
 function toggleWatchlistFromModal(id, mediaType, title, posterPath) {
     const item = { id, media_type: mediaType, title, poster_path: posterPath };
     const watchlist = getWatchlist();
