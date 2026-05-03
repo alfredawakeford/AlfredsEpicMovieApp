@@ -783,3 +783,29 @@ FALLBACK LINK BUTTON
     transition: background 0.2s;
 }
 .fallback-link-btn:hover { background: #b02a37; }
+
+/* ========================================
+TRAILER BUTTON
+======================================== */
+.trailer-btn {
+    background: #0d6efd;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.2s, transform 0.1s;
+    margin-top: 4px;
+}
+.trailer-btn:hover {
+    background: #0b5ed7;
+    transform: scale(1.04);
+}
+.trailer-btn:active {
+    transform: scale(0.98);
+}
