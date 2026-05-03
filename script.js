@@ -82,7 +82,7 @@ async function getImdbId(tmdbId, mediaType) {
         const res = await fetch(`https://api.themoviedb.org/3/${endpoint}/${tmdbId}?api_key=${apiKey}&language=en-US`);
         if (!res.ok) return null;
         const data = await res.json();
-        return data.imdb_id || null; // TMDB returns "tt1234567" format
+        return data.imdb_id || null; // Returns "tt1234567" format
     } catch (e) {
         console.warn(`Failed to fetch IMDB ID for ${mediaType} ${tmdbId}:`, e);
         return null;
@@ -92,15 +92,45 @@ async function getImdbId(tmdbId, mediaType) {
 // Fetch trailer URL from trailerdb.org
 async function getTrailerFromTrailerDb(imdbId) {
     try {
-        // TMDB returns "tt1234567", trailerdb expects same format
-        const url = `https://trailerdb.org/data/movie/${imdbId}.json`;
-        const res = await fetch(url);
+        const res = await fetch(`https://trailerdb.org/data/movie/${imdbId}.json`);
         if (!res.ok) return null;
         const data = await res.json();
         
-        // Extract embed URL - adjust field name based on actual trailerdb response structure
-        // Common patterns: data.trailer, data.embed_url, data.youtube_embed, etc.
-        return data.trailer || data.embed_url || data.youtube_embed || data.url || null;
+        // Filter for official English trailers, fallback to any English, then any official
+        const trailers = data.trailers || [];
+        
+        // Priority 1: Official English trailer
+        let best = trailers.find(t => 
+            t.type === 'trailer' && 
+            t.language === 'en' && 
+            t.is_official === true
+        );
+        
+        // Priority 2: Any English trailer
+        if (!best) {
+            best = trailers.find(t => 
+                t.type === 'trailer' && 
+                t.language === 'en'
+            );
+        }
+        
+        // Priority 3: Any official trailer (any language)
+        if (!best) {
+            best = trailers.find(t => 
+                t.type === 'trailer' && 
+                t.is_official === true
+            );
+        }
+        
+        // Priority 4: Any trailer
+        if (!best) {
+            best = trailers.find(t => t.type === 'trailer');
+        }
+        
+        if (best?.youtube_id) {
+            return `https://www.youtube.com/embed/${best.youtube_id}?rel=0&modestbranding=1&autoplay=1`;
+        }
+        return null;
     } catch (e) {
         console.warn(`Failed to fetch trailer for IMDB ${imdbId}:`, e);
         return null;
@@ -110,13 +140,8 @@ async function getTrailerFromTrailerDb(imdbId) {
 // Main function: Get trailer URL for any TMDB item
 async function fetchTrailerUrl(tmdbId, mediaType) {
     const cacheKey = `${tmdbId}_${mediaType}`;
+    if (trailerCache.has(cacheKey)) return trailerCache.get(cacheKey);
     
-    // Return cached result if available
-    if (trailerCache.has(cacheKey)) {
-        return trailerCache.get(cacheKey);
-    }
-    
-    // Fetch IMDB ID → Trailer
     const imdbId = await getImdbId(tmdbId, mediaType);
     if (!imdbId) {
         trailerCache.set(cacheKey, null);
@@ -864,15 +889,15 @@ function openTrailer(url, title) {
         iframe.src = url;
         iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;background:#000;';
         
-        // Fallback message if iframe fails
+        // Fallback message if iframe fails to load
         let loadTimeout = setTimeout(() => {
             if (!iframe._loaded) {
                 container.innerHTML = `
                     <div style="color:white;text-align:center;padding:40px;font-family:sans-serif;">
                         <p style="font-size:18px;margin-bottom:20px;">⚠️ Trailer cannot be embedded.</p>
-                        <a href="${url}" target="_blank" 
+                        <a href="${url.replace('/embed/', '/watch?v=')}" target="_blank" 
                            style="background:#e50914;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block;">
-                            ▶ Watch externally
+                            ▶ Watch on YouTube instead
                         </a>
                     </div>
                 `;
@@ -882,7 +907,7 @@ function openTrailer(url, title) {
         iframe.onload = () => { clearTimeout(loadTimeout); iframe._loaded = true; };
         iframe.onerror = () => {
             clearTimeout(loadTimeout);
-            container.innerHTML = `<div style="color:white;text-align:center;padding:40px;">⚠️ Failed to load trailer.<br><a href="${url}" target="_blank" style="color:#0d6efd;">Open externally →</a></div>`;
+            container.innerHTML = `<div style="color:white;text-align:center;padding:40px;">⚠️ Failed to load trailer.<br><a href="${url.replace('/embed/', '/watch?v=')}" target="_blank" style="color:#0d6efd;">Open externally →</a></div>`;
         };
         
         container.appendChild(iframe);
