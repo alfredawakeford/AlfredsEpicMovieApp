@@ -192,7 +192,7 @@ function renderVideoPlayer(src, id, mediaType, season, episode, autoResume = tru
     if (currentPlaybackLinks.length > 1 && currentLinkIndex < currentPlaybackLinks.length - 1) {
         const btn = document.createElement('button');
         btn.className = 'fallback-link-btn';
-        btn.textContent = '⚠️ This is not loading';
+        btn.textContent = 'Click if having loading problems';
         btn.onclick = () => {
             currentLinkIndex++;
             renderVideoPlayer(currentPlaybackLinks[currentLinkIndex], id, mediaType, season, episode, true);
