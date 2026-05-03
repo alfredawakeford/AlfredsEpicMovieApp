@@ -182,6 +182,7 @@ function setVideoSource(id, mediaType, season, episode, url) {
         videoEl.autoplay = true;
         videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
         container.appendChild(videoEl);
+        attachDebugTimeline(videoEl, id, mediaType, season, episode, autoResume);
 
         // 🎬 AUTO-REMOVE MOVIE FROM CONTINUE WATCHING
         if (mediaType === 'movie') {
