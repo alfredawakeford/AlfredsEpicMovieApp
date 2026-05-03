@@ -713,30 +713,41 @@ async function showMovieDetails(item, fromContinueWatching = false) {
                 `;
             }
         }
-        
-        // ✅ Async trailer button injection
+
         (async () => {
-            const trailerBtnContainer = document.createElement('div');
-            trailerBtnContainer.id = 'trailer-btn-container';
-            trailerBtnContainer.style.textAlign = 'center';
-            trailerBtnContainer.style.margin = '10px 0';
-            modalBody.appendChild(trailerBtnContainer);
-            
-            // Show loading state
-            trailerBtnContainer.innerHTML = '<button class="action-btn" disabled>🎬 Loading trailer...</button>';
-            
-            // Fetch and render trailer button
-            const trailerUrl = await fetchTrailerUrl(item.id, item.media_type);
-            
-            if (trailerUrl) {
-                const safeTitle = (data.title || data.name || 'Trailer').replace(/'/g, "\\'");
-                trailerBtnContainer.innerHTML = `
-                    <button class="trailer-btn" onclick="openTrailer('${trailerUrl}', '${safeTitle} - Trailer')">
-                        🎬 Play Trailer
-                    </button>
-                `;
-            } else {
-                trailerBtnContainer.innerHTML = ''; // Hide if no trailer
+            try {
+                const trailerBtnContainer = document.createElement('div');
+                trailerBtnContainer.id = 'trailer-btn-container';
+                trailerBtnContainer.style.cssText = 'text-align:center;margin:15px 0;';
+                
+                // Show loading state
+                trailerBtnContainer.innerHTML = '<button class="action-btn" disabled style="opacity:0.7">🎬 Loading trailer...</button>';
+                
+                // Append to modal actions area (or body if actions doesn't exist)
+                const actionsEl = modalBody.querySelector('.modal-actions');
+                if (actionsEl) {
+                    actionsEl.appendChild(trailerBtnContainer);
+                } else {
+                    modalBody.appendChild(trailerBtnContainer);
+                }
+                
+                // Fetch trailer URL
+                const trailerUrl = await fetchTrailerUrl(item.id, item.media_type);
+                
+                if (trailerUrl) {
+                    const safeTitle = (data.title || data.name || 'Trailer').replace(/'/g, "\\'");
+                    trailerBtnContainer.innerHTML = `
+                        <button class="trailer-btn" onclick="openTrailer('${trailerUrl}', '${safeTitle} - Trailer')">
+                            🎬 Play Trailer
+                        </button>
+                    `;
+                } else {
+                    trailerBtnContainer.innerHTML = ''; // Hide if no trailer found
+                }
+            } catch (e) {
+                console.warn('Trailer button injection failed:', e);
+                const container = document.getElementById('trailer-btn-container');
+                if (container) container.innerHTML = '';
             }
         })();
         
