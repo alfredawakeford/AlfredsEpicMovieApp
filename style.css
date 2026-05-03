@@ -788,24 +788,27 @@ FALLBACK LINK BUTTON
 TRAILER BUTTON
 ======================================== */
 .trailer-btn {
-    background: #0d6efd;
+    background: #6f42c1;
     color: white;
     border: none;
-    padding: 6px 12px;
-    border-radius: 4px;
-    font-size: 12px;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
     font-weight: 500;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     transition: background 0.2s, transform 0.1s;
-    margin-top: 4px;
 }
 .trailer-btn:hover {
-    background: #0b5ed7;
-    transform: scale(1.04);
+    background: #5a32a3;
+    transform: scale(1.03);
 }
 .trailer-btn:active {
     transform: scale(0.98);
+}
+.trailer-btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
 }
