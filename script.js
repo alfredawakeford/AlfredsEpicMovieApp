@@ -15,6 +15,72 @@ const STORAGE_WATCHED = "movieBrowser_watched";
 const STORAGE_WATCHLIST = "movieBrowser_watchlist";
 let currentPlaybackLinks = [];
 let currentLinkIndex = 0;
+
+// ========== MISSING LINKS COMMUNAL CSV ==========
+const MISSING_LINKS_CONFIG = {
+  owner: "alfredawakeford",       // 🔹 Replace
+  repo: "AlfredsEpicMovieApp",              // 🔹 Replace
+  branch: "main",                      // Change if your branch is named differently
+  path: "missing_links.csv",           // File that will be auto-created & updated
+  token: "ghp_YOUR_FINE_GRAINED_PAT"   // 🔹 See setup steps below
+};
+
+async function saveMissingLink(title, mediaType, tmdbId) {
+  try {
+    const apiUrl = `https://api.github.com/repos/${MISSING_LINKS_CONFIG.owner}/${MISSING_LINKS_CONFIG.repo}/contents/${MISSING_LINKS_CONFIG.path}?ref=${MISSING_LINKS_CONFIG.branch}`;
+    const headers = {
+      "Authorization": `Bearer ${MISSING_LINKS_CONFIG.token}`,
+      "Accept": "application/vnd.github.v3+json"
+    };
+
+    // 1. Fetch current CSV (returns 404 if file doesn't exist yet)
+    const res = await fetch(apiUrl, { headers });
+    let csvContent = "TMDB,Title,Type\n";
+    let fileSha = null;
+
+    if (res.ok) {
+      const data = await res.json();
+      fileSha = data.sha;
+      csvContent = atob(data.content);
+    }
+
+    // 2. Check if already recorded (prevent duplicates)
+    const lines = csvContent.trim().split('\n');
+    const exists = lines.some(line => line.split(',')[0] === String(tmdbId));
+    if (exists) {
+      console.log(`✅ Already recorded: ${title} (TMDB: ${tmdbId})`);
+      return;
+    }
+
+    // 3. Append new row
+    const safeTitle = title.replace(/"/g, '""'); // Escape quotes for CSV
+    const newRow = `${tmdbId},"${safeTitle}",${mediaType}`;
+    const newContent = csvContent.trim() + "\n" + newRow + "\n";
+
+    // 4. Push update to GitHub
+    const payload = {
+      message: `📥 Auto-log missing link: ${safeTitle} (${mediaType} - TMDB: ${tmdbId})`,
+      content: btoa(newContent),
+      branch: MISSING_LINKS_CONFIG.branch
+    };
+    if (fileSha) payload.sha = fileSha; // Required for updates
+
+    const pushRes = await fetch(apiUrl, {
+      method: "PUT",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (pushRes.ok) {
+      console.log(`📝 Successfully logged: ${title}`);
+    } else {
+      console.error("❌ Failed to log missing link:", await pushRes.text());
+    }
+  } catch (e) {
+    console.error("💥 Error saving missing link:", e);
+  }
+}
+
 // ========== ALTERNATE VIDEO LINKS ==========
 let alternateLinks = new Map();
 let tvAlternateLinks = new Map();
@@ -1022,11 +1088,15 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
     if (!modal) return;
     
     const watchlistItem = { id, media_type: mediaType, title: itemTitle, poster_path: posterPath };
-    
-    // 🛡️ FIX: Only modify Continue Watching data if NOT an extra (Season 0),
-    // OR if the show is already in the list (to keep it fresh).
-    // This prevents "New Show" extras from removing the item from Watchlist 
-    // without adding it to Continue Watching.
+
+    const hasAltLink = (mediaType === 'tv' && season && episode)
+    ? getTvAlternateLink(id, season, episode)
+    : getAlternateLink(id);
+  
+    if (!hasAltLink) {
+      saveMissingLink(itemTitle, mediaType, id);
+    }
+
     const watched = getWatchedData();
     const key = `${mediaType}_${id}`;
     const isInWatched = !!watched[key];
