@@ -22,7 +22,7 @@ const MISSING_LINKS_CONFIG = {
   repo: "AlfredsEpicMovieApp",              // 🔹 Replace
   branch: "main",                      // Change if your branch is named differently
   path: "missing_links.csv",           // File that will be auto-created & updated
-  token: "ghp_YOUR_FINE_GRAINED_PAT"   // 🔹 See setup steps below
+  token: "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"   // 🔹 See setup steps below
 };
 
 async function saveMissingLink(title, mediaType, tmdbId) {
