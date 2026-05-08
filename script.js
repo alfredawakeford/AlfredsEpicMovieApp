@@ -323,29 +323,48 @@ function saveWatchlist(data) {
   localStorage.setItem(STORAGE_WATCHLIST, JSON.stringify(data));
 }
 function addToWatched(item, season = null, episode = null) {
-  const watched = getWatchedData();
-  const key = `${item.media_type}_${item.id}`;
-  watched[key] = {
-    id: item.id,
-    media_type: item.media_type,
-    title: item.title || item.name,
-    poster_path: item.poster_path,
-    currentSeason: season,
-    currentEpisode: episode,
-    addedAt: Date.now(),
-    lastWatched: Date.now()
-  };
-  saveWatchedData(watched);
+    const watched = getWatchedData();
+    const key = `${item.media_type}_${item.id}`;
+    const existing = watched[key];
+
+    // 🛡️ FIX: Do not update Continue Watching progress for Extras (Season 0)
+    // If season is 0, we only update the timestamp if the item is already in the list.
+    // We do NOT change the currentSeason/currentEpisode pointer.
+    if (season === 0) {
+        if (existing) {
+            existing.lastWatched = Date.now();
+            watched[key] = existing;
+            saveWatchedData(watched);
+        }
+        return; // Stop here - do not overwrite main progress
+    }
+
+    // Normal logic for Seasons 1+
+    watched[key] = {
+        id: item.id,
+        media_type: item.media_type,
+        title: item.title || item.name,
+        poster_path: item.poster_path,
+        currentSeason: season,
+        currentEpisode: episode,
+        addedAt: existing ? existing.addedAt : Date.now(),
+        lastWatched: Date.now()
+    };
+    saveWatchedData(watched);
 }
 function updateTVEpisode(id, mediaType, currentSeason, currentEpisode) {
-  const watched = getWatchedData();
-  const key = `${mediaType}_${id}`;
-  if (watched[key]) {
-    watched[key].currentSeason = currentSeason;
-    watched[key].currentEpisode = currentEpisode;
-    watched[key].lastWatched = Date.now();
-    saveWatchedData(watched);
-  }
+    // 🛡️ FIX: Ignore updates for Extras (Season 0)
+    // Navigating within extras should not affect the main show progress in localStorage.
+    if (currentSeason === 0) return;
+
+    const watched = getWatchedData();
+    const key = `${mediaType}_${id}`;
+    if (watched[key]) {
+        watched[key].currentSeason = currentSeason;
+        watched[key].currentEpisode = currentEpisode;
+        watched[key].lastWatched = Date.now();
+        saveWatchedData(watched);
+    }
 }
 function removeFromWatched(id, mediaType, season = null, episode = null) {
   const watched = getWatchedData();
@@ -998,35 +1017,47 @@ function updateModalToUnwatchedState(id, title) {
   document.querySelectorAll('.episode-item.current, .season-toggle.current').forEach(el => el.classList.remove('current'));
 }
 async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath, season = null, episode = null) {
-  const modal = document.getElementById("videoModal");
-  const titleEl = document.getElementById("videoTitle");
-  if (!modal) return;
-  const watchlistItem = { id, media_type: mediaType, title: itemTitle, poster_path: posterPath };
-  removeFromWatchlist(watchlistItem);
-  addToWatched({ id, media_type: mediaType, title: itemTitle, poster_path: posterPath }, season, episode);
+    const modal = document.getElementById("videoModal");
+    const titleEl = document.getElementById("videoTitle");
+    if (!modal) return;
+    
+    const watchlistItem = { id, media_type: mediaType, title: itemTitle, poster_path: posterPath };
+    
+    // 🛡️ FIX: Only modify Continue Watching data if NOT an extra (Season 0),
+    // OR if the show is already in the list (to keep it fresh).
+    // This prevents "New Show" extras from removing the item from Watchlist 
+    // without adding it to Continue Watching.
+    const watched = getWatchedData();
+    const key = `${mediaType}_${id}`;
+    const isInWatched = !!watched[key];
 
-  setVideoSource(id, mediaType, season, episode, url, true);
+    if (season !== 0 || isInWatched) {
+        removeFromWatchlist(watchlistItem);
+        addToWatched({ id, media_type: mediaType, title: itemTitle, poster_path: posterPath }, season, episode);
+    }
 
-  titleEl.textContent = title || "Now Playing";
-  modal.style.display = "block";
-  document.body.style.overflow = "hidden";
+    setVideoSource(id, mediaType, season, episode, url, true);
 
-  if (document.getElementById("watchlist-tab")?.classList.contains("active")) {
-    displayWatchlist();
-  }
+    titleEl.textContent = title || "Now Playing";
+    modal.style.display = "block";
+    document.body.style.overflow = "hidden";
 
-  if (mediaType.trim() === "tv" && season && episode) {
-    try {
-      const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=en-US`);
-      const seasonData = await res.json();
-      const epData = seasonData.episodes?.find(ep => ep.episode_number === episode);
-      if (epData && epData.name) {
-        titleEl.textContent = `${itemTitle} - S${season}E${episode}: ${epData.name}`;
-      }
-    } catch (err) { console.warn("Failed to fetch episode name:", err); }
-  }
+    if (document.getElementById("watchlist-tab")?.classList.contains("active")) {
+        displayWatchlist();
+    }
 
-  setupVideoControls(id, mediaType, season, episode, itemTitle);
+    if (mediaType.trim() === "tv" && season && episode) {
+        try {
+            const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=en-US`);
+            const seasonData = await res.json();
+            const epData = seasonData.episodes?.find(ep => ep.episode_number === episode);
+            if (epData && epData.name) {
+                titleEl.textContent = `${itemTitle} - S${season}E${episode}: ${epData.name}`;
+            }
+        } catch (err) { console.warn("Failed to fetch episode name:", err); }
+    }
+
+    setupVideoControls(id, mediaType, season, episode, itemTitle);
 }
 async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
   const oldControls = document.getElementById("videoControls");
