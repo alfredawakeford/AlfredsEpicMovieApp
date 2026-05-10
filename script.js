@@ -640,7 +640,7 @@ async function showMovieDetails(item, fromContinueWatching = false) {
     if (item.media_type === "movie") {
       if (isInWatched) {
         actionButtonsHTML = `
-          <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
+          <button class="play-btn" onclick="('https://vidsrc-embed.su/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
             ▶ Play Movie
           </button>
           <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
@@ -1027,43 +1027,44 @@ function updateModalToUnwatchedState(id, title) {
   document.querySelectorAll('.episode-item.current, .season-toggle.current').forEach(el => el.classList.remove('current'));
 }
 async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath, season = null, episode = null) {
-    const modal = document.getElementById("videoModal");
-    const titleEl = document.getElementById("videoTitle");
-    if (!modal) return;
-    
-    const watchlistItem = { id, media_type: mediaType, title: itemTitle, poster_path: posterPath };
+  const modal = document.getElementById("videoModal");
+  const titleEl = document.getElementById("videoTitle");
+  if (!modal) return;
+  
+  const watchlistItem = { id, media_type: mediaType, title: itemTitle, poster_path: posterPath };
+  removeFromWatchlist(watchlistItem);
+  addToWatched({ id, media_type: mediaType, title: itemTitle, poster_path: posterPath }, season, episode);
 
-    const watched = getWatchedData();
-    const key = `${mediaType}_${id}`;
-    const isInWatched = !!watched[key];
+  setVideoSource(id, mediaType, season, episode, url, true);
 
-    if (season !== 0 || isInWatched) {
-        removeFromWatchlist(watchlistItem);
-        addToWatched({ id, media_type: mediaType, title: itemTitle, poster_path: posterPath }, season, episode);
-    }
+  // ✅ Format initial title correctly for extras
+  let displayTitle = title || "Now Playing";
+  if (mediaType.trim() === "tv" && season === 0) {
+    displayTitle = displayTitle.replace(/ - S0E(\d+)/, ` - Extra $1`);
+  }
+  titleEl.textContent = displayTitle;
 
-    setVideoSource(id, mediaType, season, episode, url, true);
+  modal.style.display = "block";
+  document.body.style.overflow = "hidden";
 
-    titleEl.textContent = title || "Now Playing";
-    modal.style.display = "block";
-    document.body.style.overflow = "hidden";
+  if (document.getElementById("watchlist-tab")?.classList.contains("active")) {
+    displayWatchlist();
+  }
 
-    if (document.getElementById("watchlist-tab")?.classList.contains("active")) {
-        displayWatchlist();
-    }
+  // ✅ Fetch & format final title with episode name
+  if (mediaType.trim() === "tv" && season !== null && episode !== null) {
+    try {
+      const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=en-US`);
+      const seasonData = await res.json();
+      const epData = seasonData.episodes?.find(ep => ep.episode_number === episode);
+      if (epData && epData.name) {
+        const epTag = season === 0 ? `Extra ${episode}` : `S${season}E${episode}`;
+        titleEl.textContent = `${itemTitle} - ${epTag}: ${epData.name}`;
+      }
+    } catch (err) { console.warn("Failed to fetch episode name:", err); }
+  }
 
-    if (mediaType.trim() === "tv" && season && episode) {
-        try {
-            const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=en-US`);
-            const seasonData = await res.json();
-            const epData = seasonData.episodes?.find(ep => ep.episode_number === episode);
-            if (epData && epData.name) {
-                titleEl.textContent = `${itemTitle} - S${season}E${episode}: ${epData.name}`;
-            }
-        } catch (err) { console.warn("Failed to fetch episode name:", err); }
-    }
-
-    setupVideoControls(id, mediaType, season, episode, itemTitle);
+  setupVideoControls(id, mediaType, season, episode, itemTitle);
 }
 async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
   const oldControls = document.getElementById("videoControls");
