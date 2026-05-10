@@ -640,7 +640,7 @@ async function showMovieDetails(item, fromContinueWatching = false) {
     if (item.media_type === "movie") {
       if (isInWatched) {
         actionButtonsHTML = `
-          <button class="play-btn" onclick="('https://vidsrc-embed.su/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
+          <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
             ▶ Play Movie
           </button>
           <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
