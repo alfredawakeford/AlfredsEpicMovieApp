@@ -1117,7 +1117,7 @@ async function navigateEpisode(direction) {
   let e = currentVideoState.episode;
   const id = currentVideoState.id;
 
-  // ✅ FIX: Keep navigation strictly within extras (Season 0)
+  // ✅ Keep navigation strictly within extras (Season 0)
   if (s === 0) {
     if (direction === 1) {
       if (e >= currentVideoState.totalEpisodesInSeason) { alert("End of extras!"); return; }
@@ -1126,11 +1126,10 @@ async function navigateEpisode(direction) {
       if (e <= 1) { alert("First extra!"); return; }
       e--;
     }
-    // Do NOT update Continue Watching or Modal UI for extras
     currentVideoState.season = s;
     currentVideoState.episode = e;
   } else {
-    // Main series navigation (unchanged logic)
+    // Main series navigation
     if (direction === 1) {
       if (e >= currentVideoState.totalEpisodesInSeason) {
         if (s >= currentVideoState.totalSeasons) { alert("End of series!"); return; }
@@ -1172,15 +1171,17 @@ async function navigateEpisode(direction) {
   }
 
   const titleEl = document.getElementById("videoTitle");
-  titleEl.textContent = `${currentVideoState.itemTitle} - S${s}E${e}`;
+  const epTag = s === 0 ? `Extra ${e}` : `S${s}E${e}`;
+  titleEl.textContent = `${currentVideoState.itemTitle} - ${epTag}`;
+  
   try {
     const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${s}?api_key=${apiKey}`);
     const sd = await res.json();
     const ed = sd.episodes?.find(ep => ep.episode_number === e);
-    if (ed?.name) titleEl.textContent = `${currentVideoState.itemTitle} - S${s}E${e}: ${ed.name}`;
+    if (ed?.name) titleEl.textContent = `${currentVideoState.itemTitle} - ${epTag}: ${ed.name}`;
   } catch(err) {}
 
-  // ✅ FIX: Only update the modal's "Play S{}E{}" button for main seasons
+  // ✅ Only update modal UI for main seasons (keeps S{}E{} button unchanged for extras)
   if (s > 0 && document.getElementById('movieModal')?.style.display === 'block') {
     try { updateModalUI(id, currentVideoState.mediaType, currentVideoState.itemTitle, s, e); } catch(e){}
   }
