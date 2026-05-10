@@ -16,70 +16,6 @@ const STORAGE_WATCHLIST = "movieBrowser_watchlist";
 let currentPlaybackLinks = [];
 let currentLinkIndex = 0;
 
-// ========== MISSING LINKS COMMUNAL CSV ==========
-const MISSING_LINKS_CONFIG = {
-  owner: "alfredawakeford",       // 🔹 Replace
-  repo: "AlfredsEpicMovieApp",              // 🔹 Replace
-  branch: "main",                      // Change if your branch is named differently
-  path: "missing_links.csv",           // File that will be auto-created & updated
-  token: "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"   // 🔹 See setup steps below
-};
-
-async function saveMissingLink(title, mediaType, tmdbId) {
-  try {
-    const apiUrl = `https://api.github.com/repos/${MISSING_LINKS_CONFIG.owner}/${MISSING_LINKS_CONFIG.repo}/contents/${MISSING_LINKS_CONFIG.path}?ref=${MISSING_LINKS_CONFIG.branch}`;
-    const headers = {
-      "Authorization": `Bearer ${MISSING_LINKS_CONFIG.token}`,
-      "Accept": "application/vnd.github.v3+json"
-    };
-
-    // 1. Fetch current CSV (returns 404 if file doesn't exist yet)
-    const res = await fetch(apiUrl, { headers });
-    let csvContent = "TMDB,Title,Type\n";
-    let fileSha = null;
-
-    if (res.ok) {
-      const data = await res.json();
-      fileSha = data.sha;
-      csvContent = atob(data.content);
-    }
-
-    // 2. Check if already recorded (prevent duplicates)
-    const lines = csvContent.trim().split('\n');
-    const exists = lines.some(line => line.split(',')[0] === String(tmdbId));
-    if (exists) {
-      console.log(`✅ Already recorded: ${title} (TMDB: ${tmdbId})`);
-      return;
-    }
-
-    // 3. Append new row
-    const safeTitle = title.replace(/"/g, '""'); // Escape quotes for CSV
-    const newRow = `${tmdbId},"${safeTitle}",${mediaType}`;
-    const newContent = csvContent.trim() + "\n" + newRow + "\n";
-
-    // 4. Push update to GitHub
-    const payload = {
-      message: `📥 Auto-log missing link: ${safeTitle} (${mediaType} - TMDB: ${tmdbId})`,
-      content: btoa(newContent),
-      branch: MISSING_LINKS_CONFIG.branch
-    };
-    if (fileSha) payload.sha = fileSha; // Required for updates
-
-    const pushRes = await fetch(apiUrl, {
-      method: "PUT",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    if (pushRes.ok) {
-      console.log(`📝 Successfully logged: ${title}`);
-    } else {
-      console.error("❌ Failed to log missing link:", await pushRes.text());
-    }
-  } catch (e) {
-    console.error("💥 Error saving missing link:", e);
-  }
-}
 
 // ========== ALTERNATE VIDEO LINKS ==========
 let alternateLinks = new Map();
@@ -325,22 +261,24 @@ function setVideoSource(id, mediaType, season, episode, fallbackUrl, autoResume 
   const container = document.querySelector(".video-container");
   if (!container) return;
   container.innerHTML = '';
-  let links = (mediaType === 'tv' && season && episode)
-    ? getTvAlternateLink(id, season, episode)
-    : getAlternateLink(id);
+
+  // ✅ FIX: Use explicit null checks so season 0 isn't treated as falsy
+  let links = (mediaType === 'tv' && season !== null && episode !== null)
+      ? getTvAlternateLink(id, season, episode)
+      : getAlternateLink(id);
 
   if (links && links.length > 0 && links[0].toLowerCase().endsWith('.mp4')) {
-    currentPlaybackLinks = links;
-    currentLinkIndex = 0;
-    renderVideoPlayer(links[0], id, mediaType, season, episode, autoResume);
+      currentPlaybackLinks = links;
+      currentLinkIndex = 0;
+      renderVideoPlayer(links[0], id, mediaType, season, episode, autoResume);
   } else {
-    currentPlaybackLinks = [];
-    const iframe = document.createElement('iframe');
-    iframe.id = 'videoFrame';
-    iframe.allowFullscreen = true;
-    iframe.src = fallbackUrl;
-    iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;';
-    container.appendChild(iframe);
+      currentPlaybackLinks = [];
+      const iframe = document.createElement('iframe');
+      iframe.id = 'videoFrame';
+      iframe.allowFullscreen = true;
+      iframe.src = fallbackUrl;
+      iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;';
+      container.appendChild(iframe);
   }
 }
 // ========== TAB NAVIGATION ==========
@@ -1089,14 +1027,6 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
     
     const watchlistItem = { id, media_type: mediaType, title: itemTitle, poster_path: posterPath };
 
-    const hasAltLink = (mediaType === 'tv' && season && episode)
-    ? getTvAlternateLink(id, season, episode)
-    : getAlternateLink(id);
-  
-    if (!hasAltLink) {
-      saveMissingLink(itemTitle, mediaType, id);
-    }
-
     const watched = getWatchedData();
     const key = `${mediaType}_${id}`;
     const isInWatched = !!watched[key];
@@ -1132,7 +1062,9 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
 async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
   const oldControls = document.getElementById("videoControls");
   if (oldControls) oldControls.remove();
-  if (mediaType.trim() !== "tv" || !season || !episode) return;
+  
+  // ✅ FIX: Explicitly check for null/undefined instead of truthy
+  if (mediaType.trim() !== "tv" || season === null || episode === null) return;
 
   currentVideoState = { id, mediaType: mediaType.trim(), season, episode, itemTitle, totalEpisodesInSeason: 0, totalSeasons: 0 };
 
@@ -1152,18 +1084,17 @@ async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
 
   container.appendChild(prevBtn);
   container.appendChild(nextBtn);
-
   document.getElementById("videoTitle").after(container);
 
   try {
-    const [seasonRes, showRes] = await Promise.all([
-      fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=en-US`),
-      fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${apiKey}&language=en-US`)
-    ]);
-    const sData = await seasonRes.json();
-    const shData = await showRes.json();
-    currentVideoState.totalEpisodesInSeason = sData.episodes?.length || 0;
-    currentVideoState.totalSeasons = shData.seasons?.filter(s => s.season_number > 0).length || 0;
+      const [seasonRes, showRes] = await Promise.all([
+          fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=en-US`),
+          fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${apiKey}&language=en-US`)
+      ]);
+      const sData = await seasonRes.json();
+      const shData = await showRes.json();
+      currentVideoState.totalEpisodesInSeason = sData.episodes?.length || 0;
+      currentVideoState.totalSeasons = shData.seasons?.filter(s => s.season_number > 0).length || 0;
   } catch (e) { console.error("Control limits fetch failed:", e); }
 
   updateButtonStates();
