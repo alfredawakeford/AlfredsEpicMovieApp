@@ -901,6 +901,12 @@ function removeFromContinueWatching(id, mediaType) {
   displayContinueWatching();
 }
 async function markEpisodeDone(id, mediaType, title, currentSeason, currentEpisode) {
+  // ✅ FIX: Extras do not affect Continue Watching or the modal play button
+  if (currentSeason === 0) {
+    alert("Extras progress is not tracked in Continue Watching.");
+    return;
+  }
+
   let nextSeason, nextEpisode;
   try {
     const seasonRes = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${currentSeason}?api_key=${apiKey}&language=en-US`);
@@ -1062,8 +1068,6 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
 async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
   const oldControls = document.getElementById("videoControls");
   if (oldControls) oldControls.remove();
-  
-  // ✅ FIX: Explicitly check for null/undefined instead of truthy
   if (mediaType.trim() !== "tv" || season === null || episode === null) return;
 
   currentVideoState = { id, mediaType: mediaType.trim(), season, episode, itemTitle, totalEpisodesInSeason: 0, totalSeasons: 0 };
@@ -1073,28 +1077,35 @@ async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
   container.className = "video-controls";
 
   const prevBtn = document.createElement("button");
-  prevBtn.textContent = "Previous Episode";
   prevBtn.className = "video-nav-btn";
   prevBtn.onclick = () => navigateEpisode(-1);
 
   const nextBtn = document.createElement("button");
-  nextBtn.textContent = "Next Episode";
   nextBtn.className = "video-nav-btn";
   nextBtn.onclick = () => navigateEpisode(1);
+
+  // ✅ Dynamic labels: Extras vs Episodes
+  if (season === 0) {
+    prevBtn.textContent = "Previous Extra";
+    nextBtn.textContent = "Next Extra";
+  } else {
+    prevBtn.textContent = "Previous Episode";
+    nextBtn.textContent = "Next Episode";
+  }
 
   container.appendChild(prevBtn);
   container.appendChild(nextBtn);
   document.getElementById("videoTitle").after(container);
 
   try {
-      const [seasonRes, showRes] = await Promise.all([
-          fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=en-US`),
-          fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${apiKey}&language=en-US`)
-      ]);
-      const sData = await seasonRes.json();
-      const shData = await showRes.json();
-      currentVideoState.totalEpisodesInSeason = sData.episodes?.length || 0;
-      currentVideoState.totalSeasons = shData.seasons?.filter(s => s.season_number > 0).length || 0;
+    const [seasonRes, showRes] = await Promise.all([
+      fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=en-US`),
+      fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${apiKey}&language=en-US`)
+    ]);
+    const sData = await seasonRes.json();
+    const shData = await showRes.json();
+    currentVideoState.totalEpisodesInSeason = sData.episodes?.length || 0;
+    currentVideoState.totalSeasons = shData.seasons?.filter(s => s.season_number > 0).length || 0;
   } catch (e) { console.error("Control limits fetch failed:", e); }
 
   updateButtonStates();
@@ -1104,25 +1115,40 @@ async function navigateEpisode(direction) {
   let s = currentVideoState.season;
   let e = currentVideoState.episode;
   const id = currentVideoState.id;
-  if (direction === 1) {
-    if (e >= currentVideoState.totalEpisodesInSeason) {
-      if (s >= currentVideoState.totalSeasons) { alert("End of series!"); return; }
-      s++; e = 1;
-      try { const r = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${s}?api_key=${apiKey}`); currentVideoState.totalEpisodesInSeason = (await r.json()).episodes?.length || 0; } catch(err){}
-    } else { e++; }
-  } else {
-    if (e <= 1) {
-      if (s <= 1) { alert("First episode!"); return; }
-      s--;
-      try { const r = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${s}?api_key=${apiKey}`); currentVideoState.totalEpisodesInSeason = (await r.json()).episodes?.length || 0; } catch(err){}
-      e = currentVideoState.totalEpisodesInSeason;
-    } else { e--; }
-  }
 
-  currentVideoState.season = s;
-  currentVideoState.episode = e;
-  updateTVEpisode(id, currentVideoState.mediaType, s, e);
-  displayContinueWatching();
+  // ✅ FIX: Keep navigation strictly within extras (Season 0)
+  if (s === 0) {
+    if (direction === 1) {
+      if (e >= currentVideoState.totalEpisodesInSeason) { alert("End of extras!"); return; }
+      e++;
+    } else {
+      if (e <= 1) { alert("First extra!"); return; }
+      e--;
+    }
+    // Do NOT update Continue Watching or Modal UI for extras
+    currentVideoState.season = s;
+    currentVideoState.episode = e;
+  } else {
+    // Main series navigation (unchanged logic)
+    if (direction === 1) {
+      if (e >= currentVideoState.totalEpisodesInSeason) {
+        if (s >= currentVideoState.totalSeasons) { alert("End of series!"); return; }
+        s++; e = 1;
+        try { const r = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${s}?api_key=${apiKey}`); currentVideoState.totalEpisodesInSeason = (await r.json()).episodes?.length || 0; } catch(err){}
+      } else { e++; }
+    } else {
+      if (e <= 1) {
+        if (s <= 1) { alert("First episode!"); return; }
+        s--;
+        try { const r = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${s}?api_key=${apiKey}`); currentVideoState.totalEpisodesInSeason = (await r.json()).episodes?.length || 0; } catch(err){}
+        e = currentVideoState.totalEpisodesInSeason;
+      } else { e--; }
+    }
+    currentVideoState.season = s;
+    currentVideoState.episode = e;
+    updateTVEpisode(id, currentVideoState.mediaType, s, e);
+    displayContinueWatching();
+  }
 
   const container = document.querySelector(".video-container");
   container.innerHTML = '';
@@ -1153,7 +1179,8 @@ async function navigateEpisode(direction) {
     if (ed?.name) titleEl.textContent = `${currentVideoState.itemTitle} - S${s}E${e}: ${ed.name}`;
   } catch(err) {}
 
-  if (document.getElementById('movieModal')?.style.display === 'block') {
+  // ✅ FIX: Only update the modal's "Play S{}E{}" button for main seasons
+  if (s > 0 && document.getElementById('movieModal')?.style.display === 'block') {
     try { updateModalUI(id, currentVideoState.mediaType, currentVideoState.itemTitle, s, e); } catch(e){}
   }
   updateButtonStates();
@@ -1162,9 +1189,14 @@ function updateButtonStates() {
   const c = document.getElementById("videoControls");
   if (!c) return;
   const [prev, next] = c.querySelectorAll("button");
-  prev.disabled = currentVideoState.season <= 1 && currentVideoState.episode <= 1;
-  next.disabled = currentVideoState.season >= currentVideoState.totalSeasons &&
-  currentVideoState.episode >= currentVideoState.totalEpisodesInSeason;
+  
+  if (currentVideoState.season === 0) {
+    prev.disabled = currentVideoState.episode <= 1;
+    next.disabled = currentVideoState.episode >= currentVideoState.totalEpisodesInSeason;
+  } else {
+    prev.disabled = currentVideoState.season <= 1 && currentVideoState.episode <= 1;
+    next.disabled = currentVideoState.season >= currentVideoState.totalSeasons && currentVideoState.episode >= currentVideoState.totalEpisodesInSeason;
+  }
 }
 function closeVideoModal() {
   const modal = document.getElementById("videoModal");
