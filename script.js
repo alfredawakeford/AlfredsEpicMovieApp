@@ -427,7 +427,7 @@ function displayContinueWatching() {
   const container = document.getElementById("continueWatching");
   const watched = getWatchedData();
   const items = Object.values(watched);
-  items.sort((a, b) => b.addedAt - a.addedAt);
+  items.sort((a, b) => (b.lastWatched || b.addedAt) - (a.lastWatched || a.addedAt));
   if (items.length === 0) {
     container.innerHTML = "<p>No watched content yet. Start watching now!</p>";
     return;
