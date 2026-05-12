@@ -246,6 +246,7 @@ function renderVideoPlayer(src, id, mediaType, season, episode, subtitleUrl, aut
   videoEl.autoplay = true;
   videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
   container.appendChild(videoEl);
+  videoEl.addEventListener('ended', onVideoEnded);
 
   attachDebugTimeline(videoEl, id, mediaType, season, episode, autoResume);
 
@@ -1245,6 +1246,7 @@ function closeVideoModal() {
 
   if (modal) modal.style.display = "none";
   if (container) container.innerHTML = '';
+  cleanupCountdown();
 
   const debugEl = document.getElementById('video-timeline-debug');
   if (debugEl) {
@@ -1272,6 +1274,140 @@ document.addEventListener("keydown", (e) => {
     document.getElementById("movieModal").style.display = "none";
   }
 });
+
+// ========== AUTO-PLAY COUNTDOWN POPUP ==========
+let countdownInterval = null;
+let countdownValue = 10;
+let pendingNextDirection = null;
+
+function showCountdownPopup(message, onConfirm, onCancel) {
+    // Remove any existing popup first
+    const existing = document.getElementById('countdownModal');
+    if (existing) existing.remove();
+    
+    const modal = document.createElement('div');
+    modal.id = 'countdownModal';
+    modal.className = 'countdown-modal';
+    modal.innerHTML = `
+        <div class="countdown-content">
+            <div class="countdown-title" id="countdownTitle">${message}</div>
+            <div class="countdown-number" id="countdownNumber">10</div>
+            <div class="countdown-buttons">
+                <button class="countdown-btn go" id="countdownGo">Go now</button>
+                <button class="countdown-btn cancel" id="countdownCancel">Cancel</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    
+    const titleEl = document.getElementById('countdownTitle');
+    const numberEl = document.getElementById('countdownNumber');
+    const goBtn = document.getElementById('countdownGo');
+    const cancelBtn = document.getElementById('countdownCancel');
+    
+    countdownValue = 10;
+    numberEl.textContent = countdownValue;
+    
+    // "Go now" button
+    goBtn.onclick = () => {
+        cleanupCountdown();
+        if (onConfirm) onConfirm();
+    };
+    
+    // "Cancel" button
+    cancelBtn.onclick = () => {
+        cleanupCountdown();
+        if (onCancel) onCancel();
+    };
+    
+    // Click outside to cancel
+    modal.onclick = (e) => {
+        if (e.target === modal) {
+            cleanupCountdown();
+            if (onCancel) onCancel();
+        }
+    };
+    
+    // Countdown timer
+    countdownInterval = setInterval(() => {
+        countdownValue--;
+        if (countdownValue <= 0) {
+            cleanupCountdown();
+            if (onConfirm) onConfirm();
+        } else {
+            numberEl.textContent = countdownValue;
+            titleEl.textContent = message.replace(/in \d+/, `in ${countdownValue}`);
+        }
+    }, 1000);
+}
+
+function cleanupCountdown() {
+    if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+    }
+    const modal = document.getElementById('countdownModal');
+    if (modal) modal.remove();
+    pendingNextDirection = null;
+}
+
+// Check if next episode has an alternate link
+async function hasNextAlternateLink(id, currentSeason, currentEpisode, direction) {
+    let nextSeason = currentSeason;
+    let nextEpisode = currentEpisode + (direction === 1 ? 1 : -1);
+    
+    // Handle season boundaries
+    if (direction === 1 && currentEpisode >= currentVideoState.totalEpisodesInSeason) {
+        if (currentSeason >= currentVideoState.totalSeasons) return false;
+        nextSeason = currentSeason + 1;
+        nextEpisode = 1;
+    } else if (direction === -1 && currentEpisode <= 1) {
+        if (currentSeason <= 1) return false;
+        nextSeason = currentSeason - 1;
+        // Fetch prev season episode count
+        try {
+            const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${nextSeason}?api_key=${apiKey}`);
+            const data = await res.json();
+            nextEpisode = data.episodes?.length || 1;
+        } catch(e) { return false; }
+    }
+    
+    const links = getTvAlternateLink(id, nextSeason, nextEpisode);
+    return !!(links && links.length > 0 && links[0].toLowerCase().endsWith('.mp4'));
+}
+
+// Triggered when video ends
+function onVideoEnded() {
+    // Only for TV episodes/extras with alternate links
+    if (currentVideoState.mediaType !== 'tv' || !currentVideoState.season) return;
+    
+    const { id, season: s, episode: e, itemTitle } = currentVideoState;
+    const isExtra = s === 0;
+    
+    // Check if next episode exists and has alternate link
+    hasNextAlternateLink(id, s, e, 1).then(hasNext => {
+        if (!hasNext) return; // Don't show popup if no valid next
+        
+        // Determine message text
+        let message = '';
+        if (isExtra) {
+            message = `Next extra playing in ${countdownValue}...`;
+        } else if (e >= currentVideoState.totalEpisodesInSeason && s < currentVideoState.totalSeasons) {
+            message = `Next episode of a new season playing in ${countdownValue}...`;
+        } else {
+            message = `Next episode playing in ${countdownValue}...`;
+        }
+        
+        // Show popup
+        showCountdownPopup(message, 
+            // On Confirm (Go now or countdown complete)
+            () => navigateEpisode(1),
+            // On Cancel
+            () => { /* Just dismiss, do nothing */ }
+        );
+    });
+}
+
 // ========== NEW ADDITIONS ==========
 async function loadNewAdditions(append = false) {
   if (newAdditionsLoading) return;
