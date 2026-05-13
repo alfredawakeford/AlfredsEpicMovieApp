@@ -19,7 +19,6 @@ let currentLinkIndex = 0;
 // ========== EXTERNAL STREAMING SERVICES CONFIG ==========
 const externalServices = [
   { name: "BBC iPlayer", csv: "BBCIplayerLinks.csv", logo: "https://upload.wikimedia.org/wikipedia/en/f/fd/BBC_iPlayer_logo_%282021%29.svg", color: "#000000" },
-  // Add more services here:
   // { name: "Netflix", csv: "netflix_links.csv", logo: "netflix_logo.svg", color: "#e50914" },
   // { name: "Amazon Prime", csv: "prime_links.csv", logo: "prime_logo.svg", color: "#00a8e1" },
   // { name: "Disney+", csv: "disney_links.csv", logo: "disney_logo.svg", color: "#113ccf" },
