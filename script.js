@@ -20,8 +20,8 @@ let currentLinkIndex = 0;
 
 // ========== EXTERNAL STREAMING SERVICES CONFIG ==========
 const externalServices = [
-  { name: "BBC iPlayer", logo: "https://upload.wikimedia.org/wikipedia/en/f/fd/BBC_iPlayer_logo_%282021%29.svg", color: "#e91e63" },
-  { name: "Netflix", logo: "netflix_logo.svg", color: "#e50914" },
+  { name: "BBC iPlayer", logo: "https://upload.wikimedia.org/wikipedia/en/f/fd/BBC_iPlayer_logo_%282021%29.svg", color: "#000000" },
+  { name: "Netflix", logo: "https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg", color: "#000000" },
   { name: "Amazon Prime", logo: "prime_logo.svg", color: "#00a8e1" },
   { name: "Disney+", logo: "disney_logo.svg", color: "#113ccf" },
   // Add more services here anytime!
