@@ -3,6 +3,7 @@ const searchInput = document.getElementById("search");
 const resultsDiv = document.getElementById("results");
 let currentPage = 1;
 let currentQuery = "";
+let currentFilter = "all";
 let loading = false;
 let newAdditionsPage = 1;
 let newAdditionsLoading = false;
@@ -634,19 +635,25 @@ async function loadResults() {
 }
 function displayResults(items, append = false) {
   if (!append) resultsDiv.innerHTML = "";
-  items.forEach(item => {
+  
+  // Filter items based on currentFilter
+  const filteredItems = items.filter(item => {
+    if (currentFilter === "all") return true;
+    return item.media_type === currentFilter;
+  });
+  
+  filteredItems.forEach(item => {
     if (!item.poster_path) return;
-    
     const div = document.createElement("div");
     div.classList.add("movie");
     const title = item.title || item.name;
     const type = item.media_type === "movie" ? "Movie" : "TV";
-    
+
     div.innerHTML = `
       <img src="https://image.tmdb.org/t/p/w300${item.poster_path}" alt="${title}">
       <div class="movie-title">${title} (${type})</div>
     `;
-    
+
     div.oncontextmenu = (e) => {
       e.preventDefault();
       const watchlist = getWatchlist();
@@ -659,11 +666,11 @@ function displayResults(items, append = false) {
       }
       displayResults(items, append);
     };
-    
+
     div.onclick = () => {
       showMovieDetails(item, false);
     };
-    
+
     resultsDiv.appendChild(div);
   });
 }
@@ -1504,4 +1511,26 @@ document.addEventListener("DOMContentLoaded", () => {
       if (e.target === videoModal) closeVideoModal();
     };
   }
+});
+
+// Search filter buttons
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = btn.dataset.filter;
+    
+    // Re-display results with new filter
+    if (currentQuery.trim().length >= 3) {
+      // Get the last loaded results and filter them
+      const allItems = Array.from(resultsDiv.querySelectorAll('.movie'));
+      allItems.forEach(item => {
+        const img = item.querySelector('img');
+        const title = img?.alt || '';
+        // This is a simple approach - we'll re-fetch to ensure accuracy
+        loadResults();
+        return;
+      });
+    }
+  });
 });
