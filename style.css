@@ -245,6 +245,34 @@ p {
 }
 
 /* ========================================
+SEARCH FILTER TABS
+======================================== */
+.search-filters {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.filter-btn {
+  background: #333;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.filter-btn:hover {
+  background: #444;
+}
+
+.filter-btn.active {
+  background: #e50914;
+}
+
+/* ========================================
    MOVIE/SHOW CARDS
    ======================================== */
 .movie {
