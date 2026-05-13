@@ -202,7 +202,12 @@ async function loadTvExternalLinks() {
       const services = externalInfo.split('|').map(s => s.trim()).filter(Boolean);
       
       services.forEach(serviceStr => {
-        const [serviceName, link] = serviceStr.split(':').map(s => s.trim());
+        const colonIndex = serviceStr.indexOf(':');
+        if (colonIndex === -1) return;
+        
+        const serviceName = serviceStr.substring(0, colonIndex).trim();
+        const link = serviceStr.substring(colonIndex + 1).trim();
+        
         if (!serviceName || !link) return;
         
         const config = externalServices.find(s => s.name === serviceName);
