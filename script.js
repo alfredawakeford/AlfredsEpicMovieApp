@@ -636,7 +636,7 @@ async function loadResults() {
 function displayResults(items, append = false) {
   if (!append) resultsDiv.innerHTML = "";
   
-  // Filter items based on currentFilter
+  // Filter based on currentFilter
   const filteredItems = items.filter(item => {
     if (currentFilter === "all") return true;
     return item.media_type === currentFilter;
@@ -1514,23 +1514,24 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // Search filter buttons
+// Search filter buttons
 document.querySelectorAll('.filter-btn').forEach(btn => {
   btn.addEventListener('click', () => {
+    // Update active state
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+    
+    // Update filter
     currentFilter = btn.dataset.filter;
     
-    // Re-display results with new filter
-    if (currentQuery.trim().length >= 3) {
-      // Get the last loaded results and filter them
-      const allItems = Array.from(resultsDiv.querySelectorAll('.movie'));
-      allItems.forEach(item => {
-        const img = item.querySelector('img');
-        const title = img?.alt || '';
-        // This is a simple approach - we'll re-fetch to ensure accuracy
-        loadResults();
-        return;
-      });
+    // Re-display current results with new filter
+    const query = searchInput.value.trim();
+    if (query.length >= 3) {
+      // Trigger new search with current query
+      currentQuery = query;
+      currentPage = 1;
+      resultsDiv.innerHTML = "";
+      loadResults();
     }
   });
 });
