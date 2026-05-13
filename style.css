@@ -817,46 +817,48 @@ TRAILER BUTTON
 EXTERNAL STREAMING SERVICES
 ======================================== */
 .external-services-section {
-  margin: 10px auto;
-  max-width: 300px;
+  margin: 10px 0;
   text-align: center;
+  width: 100%;
+}
+
+.external-services-section h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #aaa;
+  font-weight: 600;
 }
 
 .external-buttons {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   justify-content: center;
-  flex-wrap: wrap;
-  margin-top: 8px;
+  align-items: center;
 }
 
 .external-service-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px;
+  /* Button takes exact size of logo */
+  padding: 0; 
   border: none;
-  border-radius: 5px;
-  background: transparent;
+  border-radius: 6px; /* Slight rounding for polish */
   cursor: pointer;
-  transition: all 0.2s;
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
   box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  display: inline-block;
+  background: transparent; /* Color is set inline via JS */
 }
 
 .external-service-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(0,0,0,0.4);
-  filter: brightness(1.15);
-}
-
-.external-service-btn:active {
-  transform: translateY(0);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  filter: brightness(1.1);
 }
 
 .service-logo {
-  width: 40px;
-  height: 40px;
+  /* Height fixed, width auto preserves aspect ratio */
+  height: 32px; 
+  width: auto;
+  display: block;
   object-fit: contain;
-  /* Remove the white filter so logos show in their original colors */
-  /* filter: brightness(0) invert(1); */
 }
