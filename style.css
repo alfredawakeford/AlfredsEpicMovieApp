@@ -817,48 +817,40 @@ TRAILER BUTTON
 EXTERNAL STREAMING SERVICES
 ======================================== */
 .external-services-section {
-  margin: 10px 0;
+  margin: 15px 0;
   text-align: center;
   width: 100%;
-}
-
-.external-services-section h4 {
-  margin: 0 0 8px 0;
-  font-size: 14px;
-  color: #aaa;
-  font-weight: 600;
 }
 
 .external-buttons {
   display: flex;
   gap: 12px;
   justify-content: center;
-  align-items: center;
+  flex-wrap: wrap;
 }
 
 .external-service-btn {
-  /* Button takes exact size of logo */
-  padding: 0; 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 18px; /* 🟢 Increased padding for spacing around the image */
   border: none;
-  border-radius: 6px; /* Slight rounding for polish */
+  border-radius: 8px;
   cursor: pointer;
-  overflow: hidden;
   transition: transform 0.2s, box-shadow 0.2s;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-  display: inline-block;
-  background: transparent; /* Color is set inline via JS */
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  background: transparent; /* Allows your config color to show through */
 }
 
 .external-service-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 12px rgba(0,0,0,0.5);
   filter: brightness(1.1);
 }
 
 .service-logo {
-  /* Height fixed, width auto preserves aspect ratio */
-  height: 32px; 
+  height: 32px;
   width: auto;
-  display: block;
   object-fit: contain;
+  display: block;
 }
