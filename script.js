@@ -674,15 +674,16 @@ window.addEventListener("scroll", () => {
 });
 
 // ========== RENDER EXTERNAL SERVICE BUTTONS ==========
-function renderExternalButtons(tmdbId, insertAfterElement) {
+function renderExternalButtons(tmdbId, container) {
   const services = externalLinksMap.get(String(tmdbId));
   if (!services || services.size === 0) return;
   
+  // Check if already rendered to prevent duplicates
+  if (container.querySelector('.external-services-section')) return;
+  
   const section = document.createElement('div');
   section.className = 'external-services-section';
-  
-  const serviceNames = Array.from(services.keys()).join(', ');
-  section.innerHTML = `<h3 style="margin:10px 0; font-size:14px; color:#aaa;">Also on: ${serviceNames}</h3>`;
+  section.innerHTML = '<h3 style="margin:10px 0; font-size:14px; color:#aaa;">Also on:</h3>';
   
   const buttonsContainer = document.createElement('div');
   buttonsContainer.className = 'external-buttons';
@@ -691,24 +692,22 @@ function renderExternalButtons(tmdbId, insertAfterElement) {
     const btn = document.createElement('button');
     btn.className = 'external-service-btn';
     btn.style.backgroundColor = serviceData.color;
+    btn.title = serviceName; // Tooltip on hover
     btn.onclick = (e) => {
       e.stopPropagation();
       window.open(serviceData.link, '_blank', 'noopener,noreferrer');
     };
     
+    // Only show the logo, no text
     btn.innerHTML = `
       <img src="${serviceData.logo}" alt="${serviceName}" class="service-logo">
-      <span>${serviceName}</span>
     `;
     
     buttonsContainer.appendChild(btn);
   });
   
   section.appendChild(buttonsContainer);
-  
-  if (insertAfterElement && insertAfterElement.parentNode) {
-    insertAfterElement.parentNode.insertBefore(section, insertAfterElement.nextSibling);
-  }
+  container.appendChild(section);
 }
 
 // ========== MODAL & VIDEO FUNCTIONS ==========
@@ -835,7 +834,11 @@ async function showMovieDetails(item, fromContinueWatching = false) {
     
     modalBody.innerHTML = modalHTML;
 
-    renderExternalButtons(item.id, modalBody);
+    const posterImg = modalBody.querySelector('.modal-poster');
+    if (posterImg) {
+      // Insert right after the poster
+      renderExternalButtons(item.id, posterImg);
+    }
 
     // ✅ ASYNC TRAILER INJECTION: Runs AFTER modal HTML is rendered
     (async () => {
