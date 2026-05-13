@@ -4,6 +4,7 @@ const resultsDiv = document.getElementById("results");
 let currentPage = 1;
 let currentQuery = "";
 let currentFilter = "all";
+let lastSearchResults = [];
 let loading = false;
 let newAdditionsPage = 1;
 let newAdditionsLoading = false;
@@ -634,7 +635,10 @@ async function loadResults() {
   loading = false;
 }
 function displayResults(items, append = false) {
-  if (!append) resultsDiv.innerHTML = "";
+  if (!append) {
+    resultsDiv.innerHTML = "";
+    lastSearchResults = items; // Store for filtering
+  }
   
   // Filter based on currentFilter
   const filteredItems = items.filter(item => {
@@ -1514,7 +1518,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // Search filter buttons
-// Search filter buttons
+
 document.querySelectorAll('.filter-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     // Update active state
@@ -1525,13 +1529,8 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
     currentFilter = btn.dataset.filter;
     
     // Re-display current results with new filter
-    const query = searchInput.value.trim();
-    if (query.length >= 3) {
-      // Trigger new search with current query
-      currentQuery = query;
-      currentPage = 1;
-      resultsDiv.innerHTML = "";
-      loadResults();
+    if (lastSearchResults.length > 0) {
+      displayResults(lastSearchResults, false);
     }
   });
 });
