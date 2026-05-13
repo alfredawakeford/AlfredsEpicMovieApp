@@ -674,13 +674,15 @@ window.addEventListener("scroll", () => {
 });
 
 // ========== RENDER EXTERNAL SERVICE BUTTONS ==========
-function renderExternalButtons(tmdbId, container) {
+function renderExternalButtons(tmdbId, insertAfterElement) {
   const services = externalLinksMap.get(String(tmdbId));
   if (!services || services.size === 0) return;
   
   const section = document.createElement('div');
   section.className = 'external-services-section';
-  section.innerHTML = '<h3 style="margin:15px 0 10px;">Also on:</h3>';
+  
+  const serviceNames = Array.from(services.keys()).join(', ');
+  section.innerHTML = `<h3 style="margin:10px 0; font-size:14px; color:#aaa;">Also on: ${serviceNames}</h3>`;
   
   const buttonsContainer = document.createElement('div');
   buttonsContainer.className = 'external-buttons';
@@ -703,7 +705,10 @@ function renderExternalButtons(tmdbId, container) {
   });
   
   section.appendChild(buttonsContainer);
-  container.appendChild(section);
+  
+  if (insertAfterElement && insertAfterElement.parentNode) {
+    insertAfterElement.parentNode.insertBefore(section, insertAfterElement.nextSibling);
+  }
 }
 
 // ========== MODAL & VIDEO FUNCTIONS ==========
@@ -830,7 +835,10 @@ async function showMovieDetails(item, fromContinueWatching = false) {
     
     modalBody.innerHTML = modalHTML;
 
-    renderExternalButtons(item.id, modalBody);
+    const posterImg = modalBody.querySelector('.modal-poster');
+    if (posterImg) {
+      renderExternalButtons(item.id, posterImg);
+    }
 
     // ✅ ASYNC TRAILER INJECTION: Runs AFTER modal HTML is rendered
     (async () => {
