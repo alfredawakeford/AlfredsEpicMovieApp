@@ -674,42 +674,61 @@ window.addEventListener("scroll", () => {
 });
 
 // ========== RENDER EXTERNAL SERVICE BUTTONS ==========
-function renderExternalButtons(tmdbId, container) {
+// ========== RENDER EXTERNAL SERVICE BUTTONS ==========
+function renderExternalButtons(tmdbId, modalBody) {
   const services = externalLinksMap.get(String(tmdbId));
   if (!services || services.size === 0) return;
-  
+
   // Check if already rendered to prevent duplicates
-  if (container.querySelector('.external-services-section')) return;
-  
+  if (modalBody.querySelector('.external-services-section')) return;
+
+  // Create Section
   const section = document.createElement('div');
   section.className = 'external-services-section';
-  section.innerHTML = '<h3 style="margin:10px 0; font-size:14px; color:#aaa;">Also on:</h3>';
   
-  const buttonsContainer = document.createElement('div');
-  buttonsContainer.className = 'external-buttons';
-  
-  services.forEach((serviceData, serviceName) => {
+  const heading = document.createElement('h4');
+  heading.textContent = 'Also on:';
+  section.appendChild(heading);
+
+  const btnContainer = document.createElement('div');
+  btnContainer.className = 'external-buttons';
+
+  services.forEach((data, name) => {
     const btn = document.createElement('button');
     btn.className = 'external-service-btn';
-    btn.style.backgroundColor = serviceData.color;
-    btn.title = serviceName; // Tooltip on hover
+    btn.style.backgroundColor = data.color; // Use config color
+    btn.title = name;
+    
+    // Open link on click
     btn.onclick = (e) => {
       e.stopPropagation();
-      window.open(serviceData.link, '_blank', 'noopener,noreferrer');
+      window.open(data.link, '_blank', 'noopener,noreferrer');
     };
     
-    // Only show the logo, no text
-    btn.innerHTML = `
-      <img src="${serviceData.logo}" alt="${serviceName}" class="service-logo">
-    `;
+    const img = document.createElement('img');
+    img.src = data.logo;
+    img.alt = name;
+    img.className = 'service-logo';
     
-    buttonsContainer.appendChild(btn);
+    btn.appendChild(img);
+    btnContainer.appendChild(btn);
   });
-  
-  section.appendChild(buttonsContainer);
-  container.appendChild(section);
-}
 
+  section.appendChild(btnContainer);
+
+  // ✅ INSERTION LOGIC: Find modal-actions and insert after Play button
+  const actionsDiv = modalBody.querySelector('.modal-actions');
+  if (actionsDiv) {
+    const playBtn = actionsDiv.querySelector('.play-btn');
+    if (playBtn) {
+      // Insert right after the Play button
+      playBtn.after(section);
+    } else {
+      // Fallback if no play button found
+      actionsDiv.appendChild(section);
+    }
+  }
+}
 // ========== MODAL & VIDEO FUNCTIONS ==========
 async function showMovieDetails(item, fromContinueWatching = false) {
   const modal = document.getElementById("movieModal");
