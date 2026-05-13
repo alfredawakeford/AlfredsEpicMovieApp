@@ -20,34 +20,78 @@ let currentLinkIndex = 0;
 
 // ========== EXTERNAL STREAMING SERVICES CONFIG ==========
 const externalServices = [
-  { name: "BBC iPlayer", csv: "BBCIplayerLinks.csv", logo: "https://upload.wikimedia.org/wikipedia/en/f/fd/BBC_iPlayer_logo_%282021%29.svg", color: "#000000" },
-  // { name: "Netflix", csv: "netflix_links.csv", logo: "netflix_logo.svg", color: "#e50913" },
-  // { name: "Amazon Prime", csv: "prime_links.csv", logo: "prime_logo.svg", color: "#00a8e1" },
-  // { name: "Disney+", csv: "disney_links.csv", logo: "disney_logo.svg", color: "#113ccf" },
+  { name: "BBC iPlayer", logo: "https://upload.wikimedia.org/wikipedia/en/f/fd/BBC_iPlayer_logo_%282021%29.svg", color: "#e91e63" },
+  { name: "Netflix", logo: "netflix_logo.svg", color: "#e50914" },
+  { name: "Amazon Prime", logo: "prime_logo.svg", color: "#00a8e1" },
+  { name: "Disney+", logo: "disney_logo.svg", color: "#113ccf" },
+  // Add more services here anytime!
 ];
 
-let externalLinksMap = new Map(); // Structure: Map<tmdbId, Map<serviceName, link>>
+let externalLinksMap = new Map(); // Map<tmdbId, Map<serviceName, {link, logo, color}>>
 
 // ========== ALTERNATE VIDEO LINKS ==========
 let alternateLinks = new Map();
 let tvAlternateLinks = new Map();
 
+// ========== LOAD MOVIE ALTERNATE LINKS (NEW 4-COLUMN FORMAT) ==========
 async function loadAlternateLinks() {
   try {
     const response = await fetch('movielinks.csv');
-    if (!response.ok) return;
+    if (!response.ok) {
+      console.warn('movielinks.csv not found, skipping alternate links...');
+      return;
+    }
+    
     const csvText = await response.text();
-    csvText.trim().split('\n').forEach((line, index) => {
-      if (index === 0) return;
-      const [tmdbId, links, subtitle] = line.split(',').map(s => s.trim());
-      if (tmdbId && links) {
+    const lines = csvText.trim().split('\n');
+    
+    lines.forEach((line, index) => {
+      if (index === 0) return; // Skip header
+      
+      // NEW FORMAT: TMDB,ExternalLinkInfo,MP4Link,SubtitleLink
+      const parts = line.split(',').map(s => s.trim());
+      if (parts.length < 3) return; // Need at least TMDB + MP4Link
+      
+      const [tmdbId, externalInfo, mp4Links, subtitleLink] = parts;
+      
+      // ✅ Load MP4 video links (column 3) for fallback playback
+      if (tmdbId && mp4Links) {
         alternateLinks.set(tmdbId, {
-          videos: links.split('|').map(l => l.trim()).filter(Boolean),
-          subtitle: subtitle || null
+          videos: mp4Links.split('|').map(l => l.trim()).filter(Boolean),
+          subtitle: subtitleLink?.trim() || null
+        });
+      }
+      
+      // ✅ Load external streaming links (column 2) for "Also on" buttons
+      if (tmdbId && externalInfo) {
+        const services = externalInfo.split('|').map(s => s.trim()).filter(Boolean);
+        
+        services.forEach(serviceStr => {
+          const [serviceName, link] = serviceStr.split(':').map(s => s.trim());
+          if (!serviceName || !link) return;
+          
+          const config = externalServices.find(s => s.name === serviceName);
+          if (!config) {
+            console.warn(`Unknown service "${serviceName}" for TMDB ${tmdbId}`);
+            return;
+          }
+          
+          if (!externalLinksMap.has(tmdbId)) {
+            externalLinksMap.set(tmdbId, new Map());
+          }
+          externalLinksMap.get(tmdbId).set(serviceName, {
+            link: link,
+            logo: config.logo,
+            color: config.color
+          });
         });
       }
     });
-  } catch (e) { console.warn('movielinks.csv load failed:', e); }
+    
+    console.log(`✅ Loaded alternate links for ${alternateLinks.size} movies`);
+  } catch (e) {
+    console.warn('movielinks.csv load failed:', e);
+  }
 }
 
 async function loadTvAlternateLinks() {
@@ -70,38 +114,106 @@ async function loadTvAlternateLinks() {
   } catch (e) { console.warn('tvlinks.csv load failed:', e); }
 }
 
-// ========== LOAD EXTERNAL STREAMING LINKS ==========
+// ========== LOAD MOVIE EXTERNAL LINKS ==========
 async function loadExternalLinks() {
-  for (const service of externalServices) {
-    try {
-      const response = await fetch(service.csv);
-      if (!response.ok) {
-        console.warn(`${service.csv} not found, skipping...`);
-        continue;
-      }
-      
-      const csvText = await response.text();
-      const lines = csvText.trim().split('\n');
-      
-      lines.forEach((line, index) => {
-        if (index === 0) return; // Skip header
-        const [tmdbId, link] = line.split(',').map(s => s.trim());
-        if (tmdbId && link) {
-          if (!externalLinksMap.has(tmdbId)) {
-            externalLinksMap.set(tmdbId, new Map());
-          }
-          externalLinksMap.get(tmdbId).set(service.name, {
-            link: link,
-            logo: service.logo,
-            color: service.color
-          });
-        }
-      });
-      
-      console.log(`✅ Loaded ${service.name} links from ${service.csv}`);
-    } catch (e) {
-      console.warn(`Failed to load ${service.csv}:`, e);
+  try {
+    const response = await fetch('movielinks.csv');
+    if (!response.ok) {
+      console.warn('movielinks.csv not found, skipping external links...');
+      return;
     }
+    
+    const csvText = await response.text();
+    const lines = csvText.trim().split('\n');
+    
+    lines.forEach((line, index) => {
+      if (index === 0) return; // Skip header
+      
+      // New format: TMDB,ExternalLinkInfo,MP4Link,SubtitleLink
+      const parts = line.split(',').map(s => s.trim());
+      if (parts.length < 2) return;
+      
+      const [tmdbId, externalInfo] = parts;
+      
+      if (!tmdbId || !externalInfo) return;
+      
+      // Parse ExternalLinkInfo: "Service1:link1|Service2:link2"
+      const services = externalInfo.split('|').map(s => s.trim()).filter(Boolean);
+      
+      services.forEach(serviceStr => {
+        const [serviceName, link] = serviceStr.split(':').map(s => s.trim());
+        if (!serviceName || !link) return;
+        
+        // Find matching service config
+        const config = externalServices.find(s => s.name === serviceName);
+        if (!config) {
+          console.warn(`Unknown service "${serviceName}" for TMDB ${tmdbId}`);
+          return;
+        }
+        
+        if (!externalLinksMap.has(tmdbId)) {
+          externalLinksMap.set(tmdbId, new Map());
+        }
+        externalLinksMap.get(tmdbId).set(serviceName, {
+          link: link,
+          logo: config.logo,
+          color: config.color
+        });
+      });
+    });
+    
+    console.log(`✅ Loaded external links for ${externalLinksMap.size} movies`);
+  } catch (e) {
+    console.warn('Failed to load movielinks.csv:', e);
+  }
+}
+
+// ========== LOAD TV EXTERNAL LINKS ==========
+async function loadTvExternalLinks() {
+  try {
+    const response = await fetch('tvexternallinks.csv');
+    if (!response.ok) {
+      console.warn('tvexternallinks.csv not found, skipping TV external links...');
+      return;
+    }
+    
+    const csvText = await response.text();
+    const lines = csvText.trim().split('\n');
+    
+    lines.forEach((line, index) => {
+      if (index === 0) return; // Skip header
+      
+      // Format: TMDB,ExternalLinkInfo
+      const [tmdbId, externalInfo] = line.split(',').map(s => s.trim());
+      if (!tmdbId || !externalInfo) return;
+      
+      // Parse ExternalLinkInfo: "Service1:link1|Service2:link2"
+      const services = externalInfo.split('|').map(s => s.trim()).filter(Boolean);
+      
+      services.forEach(serviceStr => {
+        const [serviceName, link] = serviceStr.split(':').map(s => s.trim());
+        if (!serviceName || !link) return;
+        
+        const config = externalServices.find(s => s.name === serviceName);
+        if (!config) {
+          console.warn(`Unknown service "${serviceName}" for TV TMDB ${tmdbId}`);
+          return;
+        }
+        
+        if (!externalLinksMap.has(tmdbId)) {
+          externalLinksMap.set(tmdbId, new Map());
+        }
+        externalLinksMap.get(tmdbId).set(serviceName, {
+          link: link,
+          logo: config.logo,
+          color: config.color
+        });
+      });
+    });
+    
+    console.log(`✅ Loaded external links for TV shows`);
+  } catch (e) {
+    console.warn('Failed to load tvexternallinks.csv:', e);
   }
 }
 
@@ -1476,6 +1588,7 @@ document.addEventListener("DOMContentLoaded", () => {
   displayContinueWatching();
   loadNewAdditions();
   loadExternalLinks();
+  loadTvExternalLinks(); 
   
   const newAdditionsContainer = document.getElementById("newAdditions");
   if (newAdditionsContainer) {
