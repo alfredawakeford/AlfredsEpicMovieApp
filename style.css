@@ -817,7 +817,7 @@ TRAILER BUTTON
 EXTERNAL STREAMING SERVICES
 ======================================== */
 .external-services-section {
-  margin: 15px auto;
+  margin: 10px auto;
   max-width: 300px;
   text-align: center;
 }
@@ -833,13 +833,11 @@ EXTERNAL STREAMING SERVICES
 .external-service-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
+  justify-content: center;
+  padding: 8px;
   border: none;
   border-radius: 5px;
-  color: white;
-  font-size: 13px;
-  font-weight: 600;
+  background: transparent;
   cursor: pointer;
   transition: all 0.2s;
   box-shadow: 0 2px 6px rgba(0,0,0,0.3);
@@ -856,7 +854,9 @@ EXTERNAL STREAMING SERVICES
 }
 
 .service-logo {
-  width: 18px;
-  height: 18px;
+  width: 40px;
+  height: 40px;
   object-fit: contain;
+  /* Remove the white filter so logos show in their original colors */
+  /* filter: brightness(0) invert(1); */
 }
