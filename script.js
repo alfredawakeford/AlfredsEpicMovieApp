@@ -16,6 +16,16 @@ const STORAGE_WATCHLIST = "movieBrowser_watchlist";
 let currentPlaybackLinks = [];
 let currentLinkIndex = 0;
 
+// ========== EXTERNAL STREAMING SERVICES CONFIG ==========
+const externalServices = [
+  { name: "BBC iPlayer", csv: "BBCIplayerLinks.csv", logo: "https://upload.wikimedia.org/wikipedia/en/f/fd/BBC_iPlayer_logo_%282021%29.svg", color: "#000000" },
+  // Add more services here:
+  // { name: "Netflix", csv: "netflix_links.csv", logo: "netflix_logo.svg", color: "#e50914" },
+  // { name: "Amazon Prime", csv: "prime_links.csv", logo: "prime_logo.svg", color: "#00a8e1" },
+  // { name: "Disney+", csv: "disney_links.csv", logo: "disney_logo.svg", color: "#113ccf" },
+];
+
+let externalLinksMap = new Map(); // Structure: Map<tmdbId, Map<serviceName, link>>
 
 // ========== ALTERNATE VIDEO LINKS ==========
 let alternateLinks = new Map();
@@ -58,6 +68,42 @@ async function loadTvAlternateLinks() {
     });
   } catch (e) { console.warn('tvlinks.csv load failed:', e); }
 }
+
+// ========== LOAD EXTERNAL STREAMING LINKS ==========
+async function loadExternalLinks() {
+  for (const service of externalServices) {
+    try {
+      const response = await fetch(service.csv);
+      if (!response.ok) {
+        console.warn(`${service.csv} not found, skipping...`);
+        continue;
+      }
+      
+      const csvText = await response.text();
+      const lines = csvText.trim().split('\n');
+      
+      lines.forEach((line, index) => {
+        if (index === 0) return; // Skip header
+        const [tmdbId, link] = line.split(',').map(s => s.trim());
+        if (tmdbId && link) {
+          if (!externalLinksMap.has(tmdbId)) {
+            externalLinksMap.set(tmdbId, new Map());
+          }
+          externalLinksMap.get(tmdbId).set(service.name, {
+            link: link,
+            logo: service.logo,
+            color: service.color
+          });
+        }
+      });
+      
+      console.log(`✅ Loaded ${service.name} links from ${service.csv}`);
+    } catch (e) {
+      console.warn(`Failed to load ${service.csv}:`, e);
+    }
+  }
+}
+
 // ========== TRAILERDB INTEGRATION ==========
 let trailerCache = new Map(); // Cache: tmdbId_mediaType → trailer embed URL
 // Fetch IMDB ID from TMDB API
@@ -627,6 +673,40 @@ window.addEventListener("scroll", () => {
     loadResults();
   }
 });
+
+// ========== RENDER EXTERNAL SERVICE BUTTONS ==========
+function renderExternalButtons(tmdbId, container) {
+  const services = externalLinksMap.get(String(tmdbId));
+  if (!services || services.size === 0) return;
+  
+  const section = document.createElement('div');
+  section.className = 'external-services-section';
+  section.innerHTML = '<h3 style="margin:15px 0 10px;">Also on:</h3>';
+  
+  const buttonsContainer = document.createElement('div');
+  buttonsContainer.className = 'external-buttons';
+  
+  services.forEach((serviceData, serviceName) => {
+    const btn = document.createElement('button');
+    btn.className = 'external-service-btn';
+    btn.style.backgroundColor = serviceData.color;
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      window.open(serviceData.link, '_blank', 'noopener,noreferrer');
+    };
+    
+    btn.innerHTML = `
+      <img src="${serviceData.logo}" alt="${serviceName}" class="service-logo">
+      <span>${serviceName}</span>
+    `;
+    
+    buttonsContainer.appendChild(btn);
+  });
+  
+  section.appendChild(buttonsContainer);
+  container.appendChild(section);
+}
+
 // ========== MODAL & VIDEO FUNCTIONS ==========
 async function showMovieDetails(item, fromContinueWatching = false) {
   const modal = document.getElementById("movieModal");
@@ -747,8 +827,11 @@ async function showMovieDetails(item, fromContinueWatching = false) {
       
       modalHTML += `</div>`;
     }
+
     
     modalBody.innerHTML = modalHTML;
+
+    renderExternalButtons(item.id, modalBody);
 
     // ✅ ASYNC TRAILER INJECTION: Runs AFTER modal HTML is rendered
     (async () => {
@@ -1359,6 +1442,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadTvAlternateLinks();
   displayContinueWatching();
   loadNewAdditions();
+  loadExternalLinks();
   
   const newAdditionsContainer = document.getElementById("newAdditions");
   if (newAdditionsContainer) {
