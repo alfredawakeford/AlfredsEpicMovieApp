@@ -834,11 +834,7 @@ async function showMovieDetails(item, fromContinueWatching = false) {
     
     modalBody.innerHTML = modalHTML;
 
-    const posterImg = modalBody.querySelector('.modal-poster');
-    if (posterImg) {
-      // Insert right after the poster
-      renderExternalButtons(item.id, posterImg);
-    }
+    renderExternalButtons(item.id, modalBody);
 
     // ✅ ASYNC TRAILER INJECTION: Runs AFTER modal HTML is rendered
     (async () => {
