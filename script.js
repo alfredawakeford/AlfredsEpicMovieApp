@@ -36,23 +36,18 @@ let alternateLinks = new Map();
 let tvAlternateLinks = new Map();
 
 // ========== LOAD MOVIE ALTERNATE LINKS (NEW 4-COLUMN FORMAT) ==========
+// ========== LOAD MOVIE ALTERNATE LINKS (NEW 4-COLUMN FORMAT) ==========
 async function loadAlternateLinks() {
   try {
     const response = await fetch('movielinks.csv');
-    if (!response.ok) {
-      console.warn('movielinks.csv not found, skipping alternate links...');
-      return;
-    }
-    
+    if (!response.ok) return;
     const csvText = await response.text();
     const lines = csvText.trim().split('\n');
     
     lines.forEach((line, index) => {
       if (index === 0) return; // Skip header
-      
-      // NEW FORMAT: TMDB,ExternalLinkInfo,MP4Link,SubtitleLink
       const parts = line.split(',').map(s => s.trim());
-      if (parts.length < 3) return; // Need at least TMDB + MP4Link
+      if (parts.length < 3) return; // Need at least TMDB, ExternalLinkInfo, MP4Link
       
       const [tmdbId, externalInfo, mp4Links, subtitleLink] = parts;
       
@@ -66,60 +61,89 @@ async function loadAlternateLinks() {
       
       // ✅ Load external streaming links (column 2) for "Also on" buttons
       if (tmdbId && externalInfo) {
+        if (externalInfo === 'Nowhere') {
+          // Store special "Nowhere" flag
+          externalLinksMap.set(tmdbId, { nowhere: true });
+        } else {
+          const servicesMap = new Map();
+          const services = externalInfo.split('|').map(s => s.trim()).filter(Boolean);
+          
+          services.forEach(serviceStr => {
+            const colonIndex = serviceStr.indexOf(':');
+            if (colonIndex === -1) return;
+            
+            const serviceName = serviceStr.substring(0, colonIndex).trim();
+            const link = serviceStr.substring(colonIndex + 1).trim();
+            if (!serviceName || !link) return;
+            
+            const config = externalServices.find(s => s.name === serviceName);
+            if (!config) {
+              console.warn(`Unknown service "${serviceName}" for TMDB ${tmdbId}`);
+              return;
+            }
+            
+            servicesMap.set(serviceName, {
+              link: link,
+              logo: config.logo,
+              color: config.color
+            });
+          });
+          
+          externalLinksMap.set(tmdbId, { nowhere: false, services: servicesMap });
+        }
+      }
+    });
+    
+    console.log(`✅ Loaded alternate links for ${alternateLinks.size} movies`);
+  } catch (e) { console.warn('movielinks.csv load failed:', e); }
+}
+
+// ========== LOAD TV EXTERNAL LINKS ==========
+async function loadTvExternalLinks() {
+  try {
+    const response = await fetch('tvexternallinks.csv');
+    if (!response.ok) return;
+    const csvText = await response.text();
+    const lines = csvText.trim().split('\n');
+    
+    lines.forEach((line, index) => {
+      if (index === 0) return; // Skip header
+      const [tmdbId, externalInfo] = line.split(',').map(s => s.trim());
+      if (!tmdbId || !externalInfo) return;
+      
+      if (externalInfo === 'Nowhere') {
+        externalLinksMap.set(tmdbId, { nowhere: true });
+      } else {
+        const servicesMap = new Map();
         const services = externalInfo.split('|').map(s => s.trim()).filter(Boolean);
         
         services.forEach(serviceStr => {
-          // ✅ Split on FIRST colon only to preserve URLs with ://
           const colonIndex = serviceStr.indexOf(':');
           if (colonIndex === -1) return;
           
           const serviceName = serviceStr.substring(0, colonIndex).trim();
           const link = serviceStr.substring(colonIndex + 1).trim();
-          
           if (!serviceName || !link) return;
           
           const config = externalServices.find(s => s.name === serviceName);
           if (!config) {
-            console.warn(`Unknown service "${serviceName}" for TMDB ${tmdbId}`);
+            console.warn(`Unknown service "${serviceName}" for TV TMDB ${tmdbId}`);
             return;
           }
           
-          if (!externalLinksMap.has(tmdbId)) {
-            externalLinksMap.set(tmdbId, new Map());
-          }
-          externalLinksMap.get(tmdbId).set(serviceName, {
+          servicesMap.set(serviceName, {
             link: link,
             logo: config.logo,
             color: config.color
           });
         });
+        
+        externalLinksMap.set(tmdbId, { nowhere: false, services: servicesMap });
       }
     });
     
-    console.log(`✅ Loaded alternate links for ${alternateLinks.size} movies`);
-  } catch (e) {
-    console.warn('movielinks.csv load failed:', e);
-  }
-}
-
-async function loadTvAlternateLinks() {
-  try {
-    const response = await fetch('tvlinks.csv');
-    if (!response.ok) return;
-    const csvText = await response.text();
-    csvText.trim().split('\n').forEach((line, index) => {
-      if (index === 0) return;
-      const parts = line.split(',').map(s => s.trim());
-      if (parts.length >= 4) {
-        const [id, season, episode, links, subtitle] = parts;
-        const key = `${id}_${season}_${episode}`;
-        tvAlternateLinks.set(key, {
-          videos: links.split('|').map(l => l.trim()).filter(Boolean),
-          subtitle: subtitle || null
-        });
-      }
-    });
-  } catch (e) { console.warn('tvlinks.csv load failed:', e); }
+    console.log(`✅ Loaded external links for TV shows`);
+  } catch (e) { console.warn('tvexternallinks.csv failed:', e); }
 }
 
 // ========== LOAD MOVIE EXTERNAL LINKS ==========
@@ -815,57 +839,66 @@ window.addEventListener("scroll", () => {
 });
 
 // ========== RENDER EXTERNAL SERVICE BUTTONS ==========
-// ========== RENDER EXTERNAL SERVICE BUTTONS ==========
 function renderExternalButtons(tmdbId, modalBody) {
-  const services = externalLinksMap.get(String(tmdbId));
+  const data = externalLinksMap.get(String(tmdbId));
+  if (!data) return;
+  
+  // ✅ Handle "Nowhere" case
+  if (data.nowhere) {
+    const section = document.createElement('div');
+    section.className = 'external-services-section';
+    section.innerHTML = '<h4 style="margin:10px 0; font-size:14px; color:#aaa;">This feature is on no other streaming services!</h4>';
+    
+    // Insert after poster
+    const poster = modalBody.querySelector('.modal-poster');
+    if (poster) {
+      poster.parentNode.insertBefore(section, poster.nextSibling);
+    } else {
+      modalBody.appendChild(section);
+    }
+    return;
+  }
+  
+  const services = data.services;
   if (!services || services.size === 0) return;
-
-  // Check if already rendered to prevent duplicates
+  
+  // Check if already rendered
   if (modalBody.querySelector('.external-services-section')) return;
-
-  // Create Section
+  
   const section = document.createElement('div');
   section.className = 'external-services-section';
+  section.innerHTML = '<h4 style="margin:10px 0; font-size:14px; color:#aaa;">Also on:</h4>';
   
-  const heading = document.createElement('h4');
-  heading.textContent = 'Also on:';
-  section.appendChild(heading);
-
   const btnContainer = document.createElement('div');
   btnContainer.className = 'external-buttons';
-
-  services.forEach((data, name) => {
+  
+  services.forEach((serviceData, serviceName) => {
     const btn = document.createElement('button');
     btn.className = 'external-service-btn';
-    btn.style.backgroundColor = data.color; // Use config color
-    btn.title = name;
-    
-    // Open link on click
+    btn.style.backgroundColor = serviceData.color;
+    btn.title = serviceName;
     btn.onclick = (e) => {
       e.stopPropagation();
-      window.open(data.link, '_blank', 'noopener,noreferrer');
+      window.open(serviceData.link, '_blank', 'noopener,noreferrer');
     };
     
     const img = document.createElement('img');
-    img.src = data.logo;
-    img.alt = name;
+    img.src = serviceData.logo;
+    img.alt = serviceName;
     img.className = 'service-logo';
-    
     btn.appendChild(img);
     btnContainer.appendChild(btn);
   });
-
+  
   section.appendChild(btnContainer);
-
-  // ✅ INSERTION LOGIC: Find modal-actions and insert after Play button
+  
+  // Insert after Play button
   const actionsDiv = modalBody.querySelector('.modal-actions');
   if (actionsDiv) {
     const playBtn = actionsDiv.querySelector('.play-btn');
     if (playBtn) {
-      // Insert right after the Play button
       playBtn.after(section);
     } else {
-      // Fallback if no play button found
       actionsDiv.appendChild(section);
     }
   }
