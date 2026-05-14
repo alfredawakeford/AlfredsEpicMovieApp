@@ -22,8 +22,10 @@ let currentLinkIndex = 0;
 const externalServices = [
   { name: "BBC iPlayer", logo: "https://upload.wikimedia.org/wikipedia/en/f/fd/BBC_iPlayer_logo_%282021%29.svg", color: "#000000" },
   { name: "Netflix", logo: "https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg", color: "#101010" },
-  { name: "Amazon Prime", logo: "prime_logo.svg", color: "#00a8e1" },
-  { name: "Disney+", logo: "disney_logo.svg", color: "#113ccf" },
+  { name: "Amazon Prime", logo: "https://upload.wikimedia.org/wikipedia/commons/1/11/Amazon_Prime_Video_logo.svg", color: "#1c252e" },
+  { name: "Disney+", logo: "https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg", color: "#ffffff" },
+  { name: "YouTube", logo: "https://upload.wikimedia.org/wikipedia/commons/b/b8/YouTube_Logo_2017.svg", color: "#ffffff" },
+  { name: "Channel 4", logo: "https://upload.wikimedia.org/wikipedia/commons/4/46/All_4_%282019%29.svg", color: "#abff8a" },
   // Add more services here anytime!
 ];
 
