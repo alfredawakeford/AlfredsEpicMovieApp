@@ -205,58 +205,24 @@ async function loadExternalLinks() {
   }
 }
 
-// ========== LOAD TV EXTERNAL LINKS ==========
-async function loadTvExternalLinks() {
+async function loadTvAlternateLinks() {
   try {
-    const response = await fetch('tvexternallinks.csv');
-    if (!response.ok) {
-      console.warn('tvexternallinks.csv not found, skipping TV external links...');
-      return;
-    }
-    
+    const response = await fetch('tvlinks.csv');
+    if (!response.ok) return;
     const csvText = await response.text();
-    const lines = csvText.trim().split('\n');
-    
-    lines.forEach((line, index) => {
-      if (index === 0) return; // Skip header
-      
-      // Format: TMDB,ExternalLinkInfo
-      const [tmdbId, externalInfo] = line.split(',').map(s => s.trim());
-      if (!tmdbId || !externalInfo) return;
-      
-      // Parse ExternalLinkInfo: "Service1:link1|Service2:link2"
-      const services = externalInfo.split('|').map(s => s.trim()).filter(Boolean);
-      
-      services.forEach(serviceStr => {
-        const colonIndex = serviceStr.indexOf(':');
-        if (colonIndex === -1) return;
-        
-        const serviceName = serviceStr.substring(0, colonIndex).trim();
-        const link = serviceStr.substring(colonIndex + 1).trim();
-        
-        if (!serviceName || !link) return;
-        
-        const config = externalServices.find(s => s.name === serviceName);
-        if (!config) {
-          console.warn(`Unknown service "${serviceName}" for TV TMDB ${tmdbId}`);
-          return;
-        }
-        
-        if (!externalLinksMap.has(tmdbId)) {
-          externalLinksMap.set(tmdbId, new Map());
-        }
-        externalLinksMap.get(tmdbId).set(serviceName, {
-          link: link,
-          logo: config.logo,
-          color: config.color
+    csvText.trim().split('\n').forEach((line, index) => {
+      if (index === 0) return;
+      const parts = line.split(',').map(s => s.trim());
+      if (parts.length >= 4) {
+        const [id, season, episode, links, subtitle] = parts;
+        const key = `${id}_${season}_${episode}`;
+        tvAlternateLinks.set(key, {
+          videos: links.split('|').map(l => l.trim()).filter(Boolean),
+          subtitle: subtitle || null
         });
-      });
+      }
     });
-    
-    console.log(`✅ Loaded external links for TV shows`);
-  } catch (e) {
-    console.warn('Failed to load tvexternallinks.csv:', e);
-  }
+  } catch (e) { console.warn('tvlinks.csv load failed:', e); }
 }
 
 // ========== TRAILERDB INTEGRATION ==========
