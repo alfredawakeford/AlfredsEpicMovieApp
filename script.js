@@ -1449,15 +1449,24 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
   setupVideoControls(id, mediaType, season, episode, itemTitle);
 }
 async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
-  const oldControls = document.getElementById("videoControls");
-  if (oldControls) oldControls.remove();
+  // ✅ Remove old wrapper if it exists
+  const oldWrapper = document.getElementById("videoControlsWrapper");
+  if (oldWrapper) oldWrapper.remove();
+
   if (mediaType.trim() !== "tv" || season === null || episode === null) return;
   
   currentVideoState = { id, mediaType: mediaType.trim(), season, episode, itemTitle, totalEpisodesInSeason: 0, totalSeasons: 0 };
   
+  // ✅ Create a Wrapper for vertical stacking
+  const wrapper = document.createElement("div");
+  wrapper.id = "videoControlsWrapper";
+  wrapper.style.cssText = "width:90%; max-width:900px; margin:15px auto; display:flex; flex-direction:column; align-items:center;";
+  
+  // ✅ Button Row Container
   const container = document.createElement("div");
-  container.id = "videoControls";
+  container.id = "videoControls"; // ID kept here for updateButtonStates
   container.className = "video-controls";
+  container.style.margin = "0"; // Remove margin since wrapper handles it
   
   const prevBtn = document.createElement("button");
   prevBtn.className = "video-nav-btn";
@@ -1479,13 +1488,16 @@ async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
   container.appendChild(prevBtn);
   container.appendChild(nextBtn);
   
-  // ✅ Add next episode status message container
+  // ✅ Status Message Container (Placed BELOW buttons in wrapper)
   const nextStatusEl = document.createElement("div");
   nextStatusEl.id = "nextEpisodeStatus";
-  nextStatusEl.style.cssText = "width:100%;text-align:center;color:#888;font-size:13px;margin-top:5px;";
-  container.appendChild(nextStatusEl);
+  nextStatusEl.style.cssText = "color:#888; font-size:13px; margin-top:10px; min-height:20px;";
   
-  document.getElementById("videoTitle").after(container);
+  // ✅ Assemble
+  wrapper.appendChild(container);
+  wrapper.appendChild(nextStatusEl);
+  
+  document.getElementById("videoTitle").after(wrapper);
   
   try {
     const [seasonRes, showRes] = await Promise.all([
@@ -1497,7 +1509,7 @@ async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
     
     currentVideoState.totalEpisodesInSeason = sData.episodes?.length || 0;
     currentVideoState.totalSeasons = shData.seasons?.filter(s => s.season_number > 0).length || 0;
-    currentVideoState.episodes = sData.episodes || []; // ✅ Store episodes for air date checking
+    currentVideoState.episodes = sData.episodes || [];
     
   } catch (e) { console.error("Control limits fetch failed:", e); }
   
@@ -1694,8 +1706,8 @@ function closeVideoModal() {
   }
 
   document.body.style.overflow = "";
-  const controls = document.getElementById("videoControls");
-  if (controls) controls.remove();
+  const controlsWrapper = document.getElementById("videoControlsWrapper");
+  if (controlsWrapper) controlsWrapper.remove();
 
   currentVideoState = { 
     id: null, mediaType: null, season: null, episode: null, 
