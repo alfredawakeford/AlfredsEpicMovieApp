@@ -898,6 +898,21 @@ async function showMovieDetails(item, fromContinueWatching = false) {
     const currentEpisode = tracked?.currentEpisode || null;
     const isInWatched = tracked !== undefined;
     
+    // ✅ Check if tracked TV episode is unreleased
+    let isCurrentUnreleased = false;
+    if (item.media_type === "tv" && currentSeason !== null && currentEpisode !== null) {
+      try {
+        const seasonRes = await fetch(`https://api.themoviedb.org/3/tv/${item.id}/season/${currentSeason}?api_key=${apiKey}&language=en-US`);
+        const sData = await seasonRes.json();
+        const ep = sData.episodes?.find(e => e.episode_number == currentEpisode);
+        if (ep?.air_date) {
+          const airDate = new Date(ep.air_date);
+          const today = new Date(); today.setHours(0,0,0,0);
+          if (airDate > today) isCurrentUnreleased = true;
+        }
+      } catch(e) { console.warn("Failed to check episode release date", e); }
+    }
+    
     let actionButtonsHTML = "";
     
     if (item.media_type === "movie") {
@@ -922,19 +937,34 @@ async function showMovieDetails(item, fromContinueWatching = false) {
       }
     } else if (item.media_type === "tv") {
       if (isInWatched && currentSeason && currentEpisode) {
-        actionButtonsHTML = `
-          <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${currentSeason}-${currentEpisode}', '${title} - S${currentSeason}E${currentEpisode}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${currentSeason}, ${currentEpisode})">
-            ▶ Play Season ${currentSeason} Episode ${currentEpisode}
-          </button>
-          <div class="tv-action-group">
-            <button class="episode-done-btn" onclick="markEpisodeDone(${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', ${currentSeason}, ${currentEpisode})">
-              ✓ I watched this Episode
+        if (isCurrentUnreleased) {
+          // ✅ Unreleased: disabled button, no "I watched" option
+          actionButtonsHTML = `
+            <button class="play-btn" disabled style="background:#555;cursor:not-allowed">
+              ⏳ Episode has not released yet
             </button>
-            <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
-              Remove from Continue Watching
+            <div class="tv-action-group">
+              <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
+                Remove from Continue Watching
+              </button>
+            </div>
+          `;
+        } else {
+          // ✅ Released: normal buttons
+          actionButtonsHTML = `
+            <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${currentSeason}-${currentEpisode}', '${title} - S${currentSeason}E${currentEpisode}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${currentSeason}, ${currentEpisode})">
+              ▶ Play Season ${currentSeason} Episode ${currentEpisode}
             </button>
-          </div>
-        `;
+            <div class="tv-action-group">
+              <button class="episode-done-btn" onclick="markEpisodeDone(${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', ${currentSeason}, ${currentEpisode})">
+                ✓ I watched this Episode
+              </button>
+              <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
+                Remove from Continue Watching
+              </button>
+            </div>
+          `;
+        }
       } else {
         actionButtonsHTML = `
           <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/1-1', '${title} - S1E1', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', 1, 1)">
@@ -991,12 +1021,12 @@ async function showMovieDetails(item, fromContinueWatching = false) {
       modalHTML += `</div>`;
     }
 
-    
     modalBody.innerHTML = modalHTML;
 
+    // ✅ Render external streaming buttons
     renderExternalButtons(item.id, modalBody);
 
-    // ✅ ASYNC TRAILER INJECTION: Runs AFTER modal HTML is rendered
+    // ✅ ASYNC TRAILER INJECTION
     (async () => {
       try {
         const trailerBtnContainer = document.createElement('div');
@@ -1021,7 +1051,7 @@ async function showMovieDetails(item, fromContinueWatching = false) {
             </button>
           `;
         } else {
-          trailerBtnContainer.innerHTML = ''; // Hide if no trailer found
+          trailerBtnContainer.innerHTML = '';
         }
       } catch (e) {
         console.warn('Trailer button injection failed:', e);
@@ -1030,11 +1060,12 @@ async function showMovieDetails(item, fromContinueWatching = false) {
       }
     })();
     
+    // ✅ TV Episode list with unreleased logic
     if (item.media_type === "tv") {
       document.querySelectorAll('.season-toggle').forEach(btn => {
         btn.onclick = async (e) => {
           e.stopPropagation();
-          const seasonNum = btn.dataset.season;
+          const seasonNum = parseInt(btn.dataset.season);
           const episodesContainer = document.getElementById(`episodes-s${seasonNum}`);
           const isActive = btn.classList.toggle('active');
           
@@ -1044,22 +1075,39 @@ async function showMovieDetails(item, fromContinueWatching = false) {
               const seasonData = await seasonRes.json();
               
               if (seasonData.episodes?.length > 0) {
+                const today = new Date(); today.setHours(0,0,0,0);
+                
                 episodesContainer.innerHTML = seasonData.episodes.map(ep => {
                   const epTitle = (ep.name || 'Episode ' + ep.episode_number).replace(/'/g, "\\'");
                   const videoTitle = `${title} - S${seasonNum}E${ep.episode_number}: ${ep.name}`.replace(/'/g, "\\'");
                   const isCurrentEpisode = currentSeason == seasonNum && currentEpisode == ep.episode_number;
                   const episodeNumberDisplay = seasonNum == 0 ? '' : `<span class="episode-number">E${ep.episode_number}</span>`;
                   
+                  // ✅ Check if unreleased
+                  const airDate = ep.air_date ? new Date(ep.air_date) : null;
+                  const isUnreleased = airDate && airDate > today;
+                  
+                  // ✅ Build play button HTML
+                  const playBtnHTML = isUnreleased 
+                    ? `<span class="episode-play disabled" title="Not released yet" style="background:#555;cursor:not-allowed">⏳</span>`
+                    : `<button class="episode-play" title="Play episode"
+                       onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${seasonNum}-${ep.episode_number}', '${videoTitle}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${seasonNum}, ${ep.episode_number})">
+                       ▶
+                      </button>`;
+                  
+                  // ✅ Add unreleased message between title and date
+                  const unreleasedMsgHTML = isUnreleased 
+                    ? `<span class="episode-unreleased" style="color:#ff6b6b;font-size:12px;font-weight:600;margin:0 8px">This episode has not released yet</span>` 
+                    : '';
+                  
                   return `
-                    <div class="episode-item ${isCurrentEpisode ? 'current' : ''}">
+                    <div class="episode-item ${isCurrentEpisode ? 'current' : ''} ${isUnreleased ? 'unreleased' : ''}" ${isUnreleased ? 'style="opacity:0.7"' : ''}>
                       <div class="episode-actions">
-                        <button class="episode-play" title="Play episode"
-                          onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${seasonNum}-${ep.episode_number}', '${videoTitle}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${seasonNum}, ${ep.episode_number})">
-                          ▶
-                        </button>
+                        ${playBtnHTML}
                       </div>
                       ${episodeNumberDisplay}
                       <span class="episode-title">${ep.name}</span>
+                      ${unreleasedMsgHTML}
                       <span class="episode-date">${ep.air_date || 'TBA'}</span>
                     </div>
                   `;
