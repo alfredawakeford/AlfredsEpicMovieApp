@@ -1220,8 +1220,10 @@ async function markEpisodeDone(id, mediaType, title, currentSeason, currentEpiso
     alert("Extras progress is not tracked in Continue Watching.");
     return;
   }
-
+  
   let nextSeason, nextEpisode;
+  let isNextUnreleased = false;
+  
   try {
     const seasonRes = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${currentSeason}?api_key=${apiKey}&language=en-US`);
     if (!seasonRes.ok) throw new Error("Failed to fetch season data");
@@ -1242,21 +1244,48 @@ async function markEpisodeDone(id, mediaType, title, currentSeason, currentEpiso
       }
       nextSeason = currentSeason + 1;
       nextEpisode = 1;
+      
+      // ✅ Check if next season's first episode is unreleased
+      try {
+        const nextSeasonRes = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${nextSeason}?api_key=${apiKey}&language=en-US`);
+        const nextSeasonData = await nextSeasonRes.json();
+        const firstEp = nextSeasonData.episodes?.[0];
+        if (firstEp?.air_date) {
+          const airDate = new Date(firstEp.air_date);
+          const today = new Date(); today.setHours(0,0,0,0);
+          if (airDate > today) isNextUnreleased = true;
+        }
+      } catch(e) { console.warn("Failed to check next season release", e); }
+      
     } else {
       nextSeason = currentSeason;
       nextEpisode = currentEpisode + 1;
+      
+      // ✅ Check if next episode is unreleased
+      const nextEp = seasonData.episodes?.find(ep => ep.episode_number === nextEpisode);
+      if (nextEp?.air_date) {
+        const airDate = new Date(nextEp.air_date);
+        const today = new Date(); today.setHours(0,0,0,0);
+        if (airDate > today) isNextUnreleased = true;
+      }
     }
-    
+
     updateTVEpisode(id, mediaType, nextSeason, nextEpisode);
   } catch (error) {
     console.error("Data save failed:", error);
     alert("Failed to update progress. Please try again.");
     return;
   }
-
+  
   try {
     displayContinueWatching();
-    updateModalUI(id, mediaType, title, nextSeason, nextEpisode);
+    
+    // ✅ Update UI based on whether next episode is released
+    if (isNextUnreleased) {
+      updateModalToUnreleasedState(id, title, nextSeason, nextEpisode);
+    } else {
+      updateModalUI(id, mediaType, title, nextSeason, nextEpisode);
+    }
   } catch (uiError) {
     console.warn("UI refresh skipped (data saved successfully):", uiError);
   }
@@ -1340,6 +1369,45 @@ function updateModalToUnwatchedState(id, title) {
 
   document.querySelectorAll('.episode-item.current, .season-toggle.current').forEach(el => el.classList.remove('current'));
 }
+
+function updateModalToUnreleasedState(id, title, nextSeason, nextEpisode) {
+  const modalActions = document.querySelector('.modal-actions');
+  if (modalActions) {
+    modalActions.innerHTML = `
+      <button class="play-btn" disabled style="background:#555;cursor:not-allowed">
+        ⏳ Episode has not released yet
+      </button>
+      <div class="tv-action-group">
+        <button class="watched-btn" onclick="removeFromContinueWatching(${id}, 'tv')">
+          Remove from Continue Watching
+        </button>
+      </div>
+    `;
+  }
+  
+  // Update episode list highlighting
+  document.querySelectorAll('.episode-item.current').forEach(el => el.classList.remove('current'));
+  const seasonContainer = document.getElementById(`episodes-s${nextSeason}`);
+  if (seasonContainer) {
+    if (!seasonContainer.classList.contains('show')) {
+      seasonContainer.classList.add('show');
+      const btn = document.querySelector(`.season-toggle[data-season="${nextSeason}"]`);
+      if (btn) btn.classList.add('active');
+    }
+    const epItems = seasonContainer.querySelectorAll('.episode-item');
+    epItems.forEach(item => {
+      const numSpan = item.querySelector('.episode-number');
+      if (numSpan && numSpan.textContent.trim() === `E${nextEpisode}`) {
+        item.classList.add('current');
+      }
+    });
+  }
+  
+  document.querySelectorAll('.season-toggle.current').forEach(el => el.classList.remove('current'));
+  const nextSeasonBtn = document.querySelector(`.season-toggle[data-season="${nextSeason}"]`);
+  if (nextSeasonBtn) nextSeasonBtn.classList.add('current');
+}
+
 async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath, season = null, episode = null) {
   const modal = document.getElementById("videoModal");
   const titleEl = document.getElementById("videoTitle");
