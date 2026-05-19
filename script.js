@@ -1770,34 +1770,41 @@ function displayNewAdditions(items, clear = true) {
   if (clear) {
     container.innerHTML = "";
   }
+  
+  // ✅ Get current year dynamically (auto-updates every January)
+  const currentYear = new Date().getFullYear();
 
   items.forEach(item => {
     if (!item.poster_path) return;
-    
     const div = document.createElement("div");
     div.classList.add("movie");
-    
+
     const title = item.title || item.name;
     const type = item.media_type === "movie" ? "Movie" : "TV";
     const releaseDate = item.release_date || item.first_air_date || "";
     const year = releaseDate.split("-")[0];
-    
-    const badgeText = item.media_type === "tv" ? "New Episodes" : "New Movie";
+
+    // ✅ Dynamic badge logic
+    let badgeText = "New Movie";
+    if (item.media_type === "tv") {
+      badgeText = (year === String(currentYear)) ? "New Show" : "New Episodes";
+    }
     const badgeClass = item.media_type === "tv" ? "release-badge tv" : "release-badge movie";
-    
+
     div.innerHTML = `
-      <img src="https://image.tmdb.org/t/p/w300${item.poster_path}" alt="${title}">
-      <div class="${badgeClass}">${badgeText}</div>
-      <div class="movie-title">${title} (${type}) ${year}</div>
+       <img src="https://image.tmdb.org/t/p/w300${item.poster_path}" alt="${title}">
+       <div class="${badgeClass}">${badgeText}</div>
+       <div class="movie-title">${title} (${type}) ${year}</div>
     `;
-    
+
     div.onclick = () => {
       showMovieDetails(item, false);
     };
-    
+
     container.appendChild(div);
   });
 
+  // Loader indicator (keeps your existing infinite scroll logic intact)
   if (!clear || newAdditionsPage > 1) {
     const loader = document.createElement("div");
     loader.className = "new-additions-loader";
