@@ -771,6 +771,38 @@ VIDEO PLAYER CONTROLS
     }
 }
 
+/* ========================================
+UNRELEASED EPISODES
+======================================== */
+.episode-unreleased {
+  color: #ff6b6b;
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0 8px;
+  white-space: nowrap;
+}
+
+.episode-item.unreleased {
+  opacity: 0.65;
+  background: #252525;
+}
+
+.episode-play.disabled {
+  background: #555 !important;
+  cursor: not-allowed !important;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.play-btn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+  background: #555 !important;
+}
+
 .play-btn.pulse-yellow {
     animation: playBtnPulse 0.8s ease-in-out;
 }
