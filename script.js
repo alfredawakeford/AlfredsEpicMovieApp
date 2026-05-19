@@ -1452,21 +1452,21 @@ async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
   const oldControls = document.getElementById("videoControls");
   if (oldControls) oldControls.remove();
   if (mediaType.trim() !== "tv" || season === null || episode === null) return;
-
+  
   currentVideoState = { id, mediaType: mediaType.trim(), season, episode, itemTitle, totalEpisodesInSeason: 0, totalSeasons: 0 };
-
+  
   const container = document.createElement("div");
   container.id = "videoControls";
   container.className = "video-controls";
-
+  
   const prevBtn = document.createElement("button");
   prevBtn.className = "video-nav-btn";
   prevBtn.onclick = () => navigateEpisode(-1);
-
+  
   const nextBtn = document.createElement("button");
   nextBtn.className = "video-nav-btn";
   nextBtn.onclick = () => navigateEpisode(1);
-
+  
   // ✅ Dynamic labels: Extras vs Episodes
   if (season === 0) {
     prevBtn.textContent = "Previous Extra";
@@ -1475,11 +1475,18 @@ async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
     prevBtn.textContent = "Previous Episode";
     nextBtn.textContent = "Next Episode";
   }
-
+  
   container.appendChild(prevBtn);
   container.appendChild(nextBtn);
+  
+  // ✅ Add next episode status message container
+  const nextStatusEl = document.createElement("div");
+  nextStatusEl.id = "nextEpisodeStatus";
+  nextStatusEl.style.cssText = "width:100%;text-align:center;color:#888;font-size:13px;margin-top:5px;";
+  container.appendChild(nextStatusEl);
+  
   document.getElementById("videoTitle").after(container);
-
+  
   try {
     const [seasonRes, showRes] = await Promise.all([
       fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=en-US`),
@@ -1487,10 +1494,13 @@ async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
     ]);
     const sData = await seasonRes.json();
     const shData = await showRes.json();
+    
     currentVideoState.totalEpisodesInSeason = sData.episodes?.length || 0;
     currentVideoState.totalSeasons = shData.seasons?.filter(s => s.season_number > 0).length || 0;
+    currentVideoState.episodes = sData.episodes || []; // ✅ Store episodes for air date checking
+    
   } catch (e) { console.error("Control limits fetch failed:", e); }
-
+  
   updateButtonStates();
 }
 // ✅ Updated episode navigation
@@ -1572,14 +1582,82 @@ async function navigateEpisode(direction) {
 function updateButtonStates() {
   const c = document.getElementById("videoControls");
   if (!c) return;
+  
   const [prev, next] = c.querySelectorAll("button");
+  const statusEl = document.getElementById("nextEpisodeStatus");
   
   if (currentVideoState.season === 0) {
+    // Extras logic
     prev.disabled = currentVideoState.episode <= 1;
     next.disabled = currentVideoState.episode >= currentVideoState.totalEpisodesInSeason;
+    if (statusEl) statusEl.textContent = "";
   } else {
+    // Main series logic
+    const isLastEpisode = currentVideoState.season >= currentVideoState.totalSeasons && 
+                          currentVideoState.episode >= currentVideoState.totalEpisodesInSeason;
+    
+    // ✅ Check if next episode exists and is released
+    let nextEpisodeReleased = true;
+    let nextEpisodeExists = true;
+    
+    if (!isLastEpisode) {
+      // Calculate next episode
+      let nextS = currentVideoState.season;
+      let nextE = currentVideoState.episode + 1;
+      
+      if (nextE > currentVideoState.totalEpisodesInSeason) {
+        // Next episode is in next season
+        nextS++;
+        nextE = 1;
+      }
+      
+      // Find the episode in stored data
+      if (nextS === currentVideoState.season) {
+        const epData = currentVideoState.episodes?.find(ep => ep.episode_number === nextE);
+        if (epData?.air_date) {
+          const airDate = new Date(epData.air_date);
+          const today = new Date();
+          today.setHours(0,0,0,0);
+          if (airDate > today) {
+            nextEpisodeReleased = false;
+          }
+        }
+      } else {
+        // Next season - fetch to check
+        (async () => {
+          try {
+            const res = await fetch(`https://api.themoviedb.org/3/tv/${currentVideoState.id}/season/${nextS}?api_key=${apiKey}&language=en-US`);
+            const sData = await res.json();
+            const epData = sData.episodes?.find(ep => ep.episode_number === nextE);
+            if (epData?.air_date) {
+              const airDate = new Date(epData.air_date);
+              const today = new Date();
+              today.setHours(0,0,0,0);
+              if (airDate > today) {
+                next.disabled = true;
+                if (statusEl) statusEl.textContent = "⏳ Next episode not released yet";
+                statusEl.style.color = "#ff6b6b";
+              }
+            }
+          } catch(e) {}
+        })();
+      }
+    }
+    
     prev.disabled = currentVideoState.season <= 1 && currentVideoState.episode <= 1;
-    next.disabled = currentVideoState.season >= currentVideoState.totalSeasons && currentVideoState.episode >= currentVideoState.totalEpisodesInSeason;
+    next.disabled = isLastEpisode || !nextEpisodeReleased;
+    
+    if (statusEl) {
+      if (!nextEpisodeReleased) {
+        statusEl.textContent = "⏳ Next episode not released yet";
+        statusEl.style.color = "#ff6b6b";
+      } else if (isLastEpisode) {
+        statusEl.textContent = "✓ End of series";
+        statusEl.style.color = "#28a745";
+      } else {
+        statusEl.textContent = "";
+      }
+    }
   }
 }
 function closeVideoModal() {
