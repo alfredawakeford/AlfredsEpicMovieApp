@@ -17,7 +17,12 @@ const STORAGE_WATCHED = "movieBrowser_watched";
 const STORAGE_WATCHLIST = "movieBrowser_watchlist";
 let currentPlaybackLinks = [];
 let currentLinkIndex = 0;
-
+// 🆕 Pagination & Loading State Per Tab
+const tabState = {
+  home: { page: 1, loading: false },
+  movies: { page: 1, loading: false },
+  tv: { page: 1, loading: false }
+};
 // ========== EXTERNAL STREAMING SERVICES CONFIG ==========
 const externalServices = [
   { name: "BBC iPlayer", logo: "https://upload.wikimedia.org/wikipedia/en/f/fd/BBC_iPlayer_logo_%282021%29.svg", color: "#000000" },
@@ -470,18 +475,23 @@ function setVideoSource(id, mediaType, season, episode, fallbackUrl, autoResume 
   }
 }
 // ========== TAB NAVIGATION ==========
-document.querySelectorAll(".tab-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-    document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-    btn.classList.add("active");
-    document.getElementById(`${btn.dataset.tab}-tab`).classList.add("active");
-    if (btn.dataset.tab === "home") {
-      displayContinueWatching();
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    
+    btn.classList.add('active');
+    const tabId = `${btn.dataset.tab}-tab`;
+    document.getElementById(tabId)?.classList.add('active');
+    
+    const tabName = btn.dataset.tab;
+    // Load content for browse tabs
+    if (['home', 'movies', 'tv'].includes(tabName)) {
+      const filters = { home: 'all', movies: 'movie', tv: 'tv' };
+      displayContinueWatching(filters[tabName], `continueWatching-${tabName}`);
+      loadNewAdditions(tabName, false);
     }
-    if (btn.dataset.tab === "watchlist") {
-      displayWatchlist();
-    }
+    if (tabName === 'watchlist') displayWatchlist();
   });
 });
 // ========== CLEAR MOVIES FROM WATCHING ==========
@@ -591,40 +601,41 @@ function removeFromWatchlist(item) {
   saveWatchlist(filtered);
 }
 // ========== CONTINUE WATCHING DISPLAY ==========
-function displayContinueWatching() {
-  const container = document.getElementById("continueWatching");
+// ✅ REFACTORED: Centralized Continue Watching renderer
+function displayContinueWatching(filter = 'all', containerId = 'continueWatching-home') {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  
   const watched = getWatchedData();
-  const items = Object.values(watched);
+  let items = Object.values(watched);
+  if (filter !== 'all') {
+    items = items.filter(item => item.media_type === filter);
+  }
   items.sort((a, b) => (b.lastWatched || b.addedAt) - (a.lastWatched || a.addedAt));
+  
+  container.innerHTML = '';
   if (items.length === 0) {
-    container.innerHTML = "<p>No watched content yet. Start watching now!</p>";
+    container.innerHTML = '<p>No watched content yet. Start watching now!</p>';
     return;
   }
-
-  container.innerHTML = "";
+  
   items.forEach(item => {
-    const div = document.createElement("div");
-    div.classList.add("movie", "continue-card");
+    const div = document.createElement('div');
+    div.classList.add('movie', 'continue-card');
     const title = item.title || item.name;
-    const type = item.media_type === "movie" ? "Movie" : "TV";
-    
-    let episodeBadge = "";
-    let episodeInfo = "";
-    if (item.media_type === "tv" && item.currentSeason && item.currentEpisode) {
+    const type = item.media_type === 'movie' ? 'Movie' : 'TV';
+    let episodeBadge = '';
+    let episodeInfo = '';
+    if (item.media_type === 'tv' && item.currentSeason && item.currentEpisode) {
       episodeBadge = `<div class="episode-badge">S${item.currentSeason}E${item.currentEpisode}</div>`;
       episodeInfo = ` - S${item.currentSeason}E${item.currentEpisode}`;
     }
-    
     div.innerHTML = `
       <img src="https://image.tmdb.org/t/p/w300${item.poster_path}" alt="${title}">
       ${episodeBadge}
       <div class="movie-title">${title} (${type})${episodeInfo}</div>
     `;
-    
-    div.onclick = () => {
-      showMovieDetails(item, true);
-    };
-    
+    div.onclick = () => showMovieDetails(item, true);
     container.appendChild(div);
   });
 }
@@ -1725,114 +1736,106 @@ document.addEventListener("keydown", (e) => {
   }
 });
 // ========== NEW ADDITIONS ==========
-async function loadNewAdditions(append = false) {
-  if (newAdditionsLoading) return;
-  const container = document.getElementById("newAdditions");
-  if (!append) {
-    container.innerHTML = "<p>Loading...</p>";
-    newAdditionsPage = 1;
-  }
-
-  newAdditionsLoading = true;
+// ✅ REFACTORED: Centralized New Additions Loader
+async function loadNewAdditions(tabName, append = false) {
+  const state = tabState[tabName];
+  if (!state || state.loading) return;
+  state.loading = true;
+  
+  const containerId = `newAdditions-${tabName}`;
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  if (!append) container.innerHTML = '<p>Loading...</p>';
 
   try {
+    // Fetch both, then filter in JS to keep sorting & badge logic unified
     const [moviesRes, tvRes] = await Promise.all([
-      fetch(`https://api.themoviedb.org/3/movie/now_playing?api_key=${apiKey}&page=${newAdditionsPage}`),
-      fetch(`https://api.themoviedb.org/3/tv/on_the_air?api_key=${apiKey}&page=${newAdditionsPage}`)
+      fetch(`https://api.themoviedb.org/3/movie/now_playing?api_key=${apiKey}&page=${state.page}`),
+      fetch(`https://api.themoviedb.org/3/tv/on_the_air?api_key=${apiKey}&page=${state.page}`)
     ]);
-    
     const moviesData = await moviesRes.json();
     const tvData = await tvRes.json();
     
-    const movies = moviesData.results.map(m => ({ ...m, media_type: "movie" }));
-    const tv = tvData.results.map(t => ({ ...t, media_type: "tv" }));
+    let combined = [
+      ...(moviesData.results || []).map(m => ({...m, media_type: 'movie'})),
+      ...(tvData.results || []).map(t => ({...t, media_type: 'tv'}))
+    ];
     
-    let combined = [...movies, ...tv];
-    combined.sort((a, b) => {
-      const dateA = new Date(a.release_date || a.first_air_date || 0);
-      const dateB = new Date(b.release_date || b.first_air_date || 0);
-      return dateB - dateA;
-    });
+    // Filter by tab
+    const filters = { home: 'all', movies: 'movie', tv: 'tv' };
+    const filter = filters[tabName];
+    if (filter !== 'all') combined = combined.filter(i => i.media_type === filter);
     
-    displayNewAdditions(combined, !append);
-    newAdditionsPage++;
-  } catch (error) {
-    console.error("Error loading new additions:", error);
-    if (!append) {
-      container.innerHTML = "<p>Failed to load new additions</p>";
-    }
+    // Sort by newest
+    combined.sort((a, b) => new Date(b.release_date || b.first_air_date || 0) - new Date(a.release_date || a.first_air_date || 0));
+    
+    // 🆕 Badge rule: Movies tab hides "New Movie" strap, TV/Home keeps it
+    const showMovieBadge = tabName !== 'movies';
+    displayNewAdditions(combined, !append, container, showMovieBadge);
+    state.page++;
+  } catch (e) {
+    console.error("Error loading new additions:", e);
+    if (!append) container.innerHTML = '<p>Failed to load new additions</p>';
   }
-
-  newAdditionsLoading = false;
+  state.loading = false;
 }
-function displayNewAdditions(items, clear = true) {
-  const container = document.getElementById("newAdditions");
-  if (clear) {
-    container.innerHTML = "";
-  }
-  
-  // ✅ Get current year dynamically (auto-updates every January)
-  const currentYear = new Date().getFullYear();
 
+// ✅ REFACTORED: Centralized New Additions Renderer
+function displayNewAdditions(items, clear, container, showMovieBadge) {
+  if (clear) container.innerHTML = '';
+  const currentYear = new Date().getFullYear();
+  
   items.forEach(item => {
     if (!item.poster_path) return;
-    const div = document.createElement("div");
-    div.classList.add("movie");
-
+    const div = document.createElement('div');
+    div.classList.add('movie');
     const title = item.title || item.name;
-    const type = item.media_type === "movie" ? "Movie" : "TV";
-    const releaseDate = item.release_date || item.first_air_date || "";
-    const year = releaseDate.split("-")[0];
+    const type = item.media_type === 'movie' ? 'Movie' : 'TV';
+    const releaseDate = item.release_date || item.first_air_date || '';
+    const year = releaseDate.split('-')[0];
 
-    // ✅ Dynamic badge logic
-    let badgeText = "New Movie";
-    if (item.media_type === "tv") {
-      badgeText = (year === String(currentYear)) ? "New Show" : "New Episodes";
+    // 🆕 Conditional Badge Logic
+    let badgeHTML = '';
+    if (showMovieBadge || item.media_type === 'tv') {
+      let badgeText = 'New Movie';
+      if (item.media_type === 'tv') {
+        badgeText = (year === String(currentYear)) ? 'New Show' : 'New Episodes';
+      }
+      const badgeClass = item.media_type === 'tv' ? 'release-badge tv' : 'release-badge movie';
+      badgeHTML = `<div class="${badgeClass}">${badgeText}</div>`;
     }
-    const badgeClass = item.media_type === "tv" ? "release-badge tv" : "release-badge movie";
 
     div.innerHTML = `
-       <img src="https://image.tmdb.org/t/p/w300${item.poster_path}" alt="${title}">
-       <div class="${badgeClass}">${badgeText}</div>
-       <div class="movie-title">${title} (${type}) ${year}</div>
+      <img src="https://image.tmdb.org/t/p/w300${item.poster_path}" alt="${title}">
+      ${badgeHTML}
+      <div class="movie-title">${title} (${type}) ${year}</div>
     `;
-
-    div.onclick = () => {
-      showMovieDetails(item, false);
-    };
-
+    div.onclick = () => showMovieDetails(item, false);
     container.appendChild(div);
   });
-
-  // Loader indicator (keeps your existing infinite scroll logic intact)
-  if (!clear || newAdditionsPage > 1) {
-    const loader = document.createElement("div");
-    loader.className = "new-additions-loader";
-    loader.innerHTML = "Loading more...";
-    container.appendChild(loader);
-  }
 }
+
 // ========== DOMContentLoaded ==========
 document.addEventListener("DOMContentLoaded", () => {
+  ['home', 'movies', 'tv'].forEach(tab => loadNewAdditions(tab, false));
+  displayContinueWatching('all', 'continueWatching-home');
   loadAlternateLinks();
   loadTvAlternateLinks();
-  displayContinueWatching();
-  loadNewAdditions();
   loadExternalLinks();
   loadTvExternalLinks(); 
   
-  const newAdditionsContainer = document.getElementById("newAdditions");
-  if (newAdditionsContainer) {
-    newAdditionsContainer.addEventListener("scroll", () => {
-      const scrollLeft = newAdditionsContainer.scrollLeft;
-      const scrollWidth = newAdditionsContainer.scrollWidth;
-      const clientWidth = newAdditionsContainer.clientWidth;
-      
-      if (scrollLeft + clientWidth >= scrollWidth * 0.8) {
-        loadNewAdditions(true);
+  // 🆕 Infinite Scroll for each New Additions container
+  ['home', 'movies', 'tv'].forEach(tab => {
+    const container = document.getElementById(`newAdditions-${tab}`);
+    if (!container) return;
+    container.addEventListener('scroll', () => {
+      const state = tabState[tab];
+      if (state.loading) return;
+      if (container.scrollLeft + container.clientWidth >= container.scrollWidth * 0.8) {
+        loadNewAdditions(tab, true);
       }
     });
-  }
+  });
 
   // ✅ FIXED MODAL CLOSING LOGIC (removed trailing spaces in selectors)
   const movieModal = document.getElementById("movieModal");
