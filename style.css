@@ -40,6 +40,17 @@ p {
     text-align: center;
 }
 
+/* Empty State Message */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #888;
+  font-size: 16px;
+  line-height: 1.6;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
 /* ========================================
    TAB NAVIGATION
    ======================================== */
