@@ -15,7 +15,6 @@ let currentVideoState = {
 // STORAGE KEYS
 const STORAGE_WATCHED = "movieBrowser_watched";
 const STORAGE_WATCHLIST = "movieBrowser_watchlist";
-const NEW_RELEASES_CACHE_TTL = 12 * 60 * 60 * 1000;
 let currentPlaybackLinks = [];
 let currentLinkIndex = 0;
 // 🆕 Pagination & Loading State Per Tab
@@ -1736,19 +1735,31 @@ document.addEventListener("keydown", (e) => {
     document.getElementById("movieModal").style.display = "none";
   }
 });
-// ========== NEW ADDITIONS ==========
+// ✅ REPLACE YOUR EXISTING loadNewAdditions & displayNewAdditions WITH THESE
+
 async function loadNewAdditions(append = false) {
   if (newAdditionsLoading) return;
-  const container = document.getElementById("newAdditions");
   
-  // 🔒 CHECK CACHE ON INITIAL LOAD
+  // 🛡️ SAFETY CHECK: Prevents crash if container is missing
+  const container = document.getElementById("newAdditions");
+  if (!container) {
+    console.warn("⚠️ New Additions container (#newAdditions) not found. Skipping load.");
+    return;
+  }
+
+  //  MIDNIGHT CACHE LOGIC
+  const todayStr = new Date().toISOString().split('T')[0]; // e.g., "2024-05-21"
+  const cache = JSON.parse(localStorage.getItem("newReleasesCache") || "{}");
+  
+  // If we have valid cache for TODAY and this is an initial load, use it instantly!
+  if (!append && cache.date === todayStr && cache.data) {
+    console.log(`📦 Using cached new releases for ${todayStr}`);
+    displayNewAdditions(cache.data, true);
+    return;
+  }
+
+  // If loading fresh, show loading state and reset page counter
   if (!append) {
-    const cache = JSON.parse(localStorage.getItem("newReleasesCache") || "{}");
-    if (cache.data && (Date.now() - cache.timestamp < NEW_RELEASES_CACHE_TTL)) {
-      console.log("📦 Using cached new releases");
-      displayNewAdditions(cache.data, true);
-      return;
-    }
     container.innerHTML = "<p>Loading...</p>";
     newAdditionsPage = 1;
   }
@@ -1762,16 +1773,19 @@ async function loadNewAdditions(append = false) {
     const moviesData = await moviesRes.json();
     const tvData = await tvRes.json();
 
-    const combined = [
-      ...(moviesData.results || []).map(m => ({ ...m, media_type: "movie" })),
-      ...(tvData.results || []).map(t => ({ ...t, media_type: "tv" }))
-    ];
+    const movies = moviesData.results.map(m => ({ ...m, media_type: "movie" }));
+    const tv = tvData.results.map(t => ({ ...t, media_type: "tv" }));
 
-    combined.sort((a, b) => new Date(b.release_date || b.first_air_date || 0) - new Date(a.release_date || a.first_air_date || 0));
+    let combined = [...movies, ...tv];
+    combined.sort((a, b) => {
+      const dateA = new Date(a.release_date || a.first_air_date || 0);
+      const dateB = new Date(b.release_date || b.first_air_date || 0);
+      return dateB - dateA;
+    });
 
-    // 💾 SAVE TO CACHE
+    // 💾 SAVE TO CACHE WITH TODAY'S DATE
     localStorage.setItem("newReleasesCache", JSON.stringify({
-      timestamp: Date.now(),
+      date: todayStr,
       data: combined
     }));
 
@@ -1784,40 +1798,47 @@ async function loadNewAdditions(append = false) {
   newAdditionsLoading = false;
 }
 
-function displayNewAdditions(items, clear, container, showMovieBadge) {
-  if (clear) container.innerHTML = '';
+function displayNewAdditions(items, clear = true) {
+  // 🛡️ SAFETY CHECK
+  const container = document.getElementById("newAdditions");
+  if (!container) return; 
+
+  if (clear) container.innerHTML = "";
+  
   const currentYear = new Date().getFullYear();
   
   items.forEach(item => {
     if (!item.poster_path) return;
-    const div = document.createElement('div');
-    div.classList.add('movie');
+    const div = document.createElement("div");
+    div.classList.add("movie");
     const title = item.title || item.name;
-    const type = item.media_type === 'movie' ? 'Movie' : 'TV';
-    const releaseDate = item.release_date || item.first_air_date || '';
-    const year = releaseDate.split('-')[0];
+    const type = item.media_type === "movie" ? "Movie" : "TV";
+    const releaseDate = item.release_date || item.first_air_date || "";
+    const year = releaseDate.split("-")[0];
 
-    // 🆕 Conditional Badge Logic
-    let badgeHTML = '';
-    if (showMovieBadge || item.media_type === 'tv') {
-      let badgeText = 'New Movie';
-      if (item.media_type === 'tv') {
-        badgeText = (year === String(currentYear)) ? 'New Show' : 'New Episodes';
-      }
-      const badgeClass = item.media_type === 'tv' ? 'release-badge tv' : 'release-badge movie';
-      badgeHTML = `<div class="${badgeClass}">${badgeText}</div>`;
+    let badgeText = "New Movie";
+    if (item.media_type === "tv") {
+      badgeText = (year === String(currentYear)) ? "New Show" : "New Episodes";
     }
+    const badgeClass = item.media_type === "tv" ? "release-badge tv" : "release-badge movie";
 
     div.innerHTML = `
       <img src="https://image.tmdb.org/t/p/w300${item.poster_path}" alt="${title}">
-      ${badgeHTML}
+      <div class="${badgeClass}">${badgeText}</div>
       <div class="movie-title">${title} (${type}) ${year}</div>
     `;
+
     div.onclick = () => showMovieDetails(item, false);
     container.appendChild(div);
   });
-}
 
+  if (!clear || newAdditionsPage > 1) {
+    const loader = document.createElement("div");
+    loader.className = "new-additions-loader";
+    loader.innerHTML = "Loading more...";
+    container.appendChild(loader);
+  }
+}
 // ========== DOMContentLoaded ==========
 document.addEventListener("DOMContentLoaded", () => {
   ['home', 'movies', 'tv'].forEach(tab => loadNewAdditions(tab, false));
