@@ -15,6 +15,7 @@ let currentVideoState = {
 // STORAGE KEYS
 const STORAGE_WATCHED = "movieBrowser_watched";
 const STORAGE_WATCHLIST = "movieBrowser_watchlist";
+const NEW_RELEASES_CACHE_TTL = 12 * 60 * 60 * 1000;
 let currentPlaybackLinks = [];
 let currentLinkIndex = 0;
 // 🆕 Pagination & Loading State Per Tab
@@ -1736,51 +1737,53 @@ document.addEventListener("keydown", (e) => {
   }
 });
 // ========== NEW ADDITIONS ==========
-// ✅ REFACTORED: Centralized New Additions Loader
-async function loadNewAdditions(tabName, append = false) {
-  const state = tabState[tabName];
-  if (!state || state.loading) return;
-  state.loading = true;
+async function loadNewAdditions(append = false) {
+  if (newAdditionsLoading) return;
+  const container = document.getElementById("newAdditions");
   
-  const containerId = `newAdditions-${tabName}`;
-  const container = document.getElementById(containerId);
-  if (!container) return;
-  if (!append) container.innerHTML = '<p>Loading...</p>';
+  // 🔒 CHECK CACHE ON INITIAL LOAD
+  if (!append) {
+    const cache = JSON.parse(localStorage.getItem("newReleasesCache") || "{}");
+    if (cache.data && (Date.now() - cache.timestamp < NEW_RELEASES_CACHE_TTL)) {
+      console.log("📦 Using cached new releases");
+      displayNewAdditions(cache.data, true);
+      return;
+    }
+    container.innerHTML = "<p>Loading...</p>";
+    newAdditionsPage = 1;
+  }
 
+  newAdditionsLoading = true;
   try {
-    // Fetch both, then filter in JS to keep sorting & badge logic unified
     const [moviesRes, tvRes] = await Promise.all([
-      fetch(`https://api.themoviedb.org/3/movie/now_playing?api_key=${apiKey}&page=${state.page}`),
-      fetch(`https://api.themoviedb.org/3/tv/on_the_air?api_key=${apiKey}&page=${state.page}`)
+      fetch(`https://api.themoviedb.org/3/movie/now_playing?api_key=${apiKey}&page=${newAdditionsPage}`),
+      fetch(`https://api.themoviedb.org/3/tv/on_the_air?api_key=${apiKey}&page=${newAdditionsPage}`)
     ]);
     const moviesData = await moviesRes.json();
     const tvData = await tvRes.json();
-    
-    let combined = [
-      ...(moviesData.results || []).map(m => ({...m, media_type: 'movie'})),
-      ...(tvData.results || []).map(t => ({...t, media_type: 'tv'}))
+
+    const combined = [
+      ...(moviesData.results || []).map(m => ({ ...m, media_type: "movie" })),
+      ...(tvData.results || []).map(t => ({ ...t, media_type: "tv" }))
     ];
-    
-    // Filter by tab
-    const filters = { home: 'all', movies: 'movie', tv: 'tv' };
-    const filter = filters[tabName];
-    if (filter !== 'all') combined = combined.filter(i => i.media_type === filter);
-    
-    // Sort by newest
+
     combined.sort((a, b) => new Date(b.release_date || b.first_air_date || 0) - new Date(a.release_date || a.first_air_date || 0));
-    
-    // 🆕 Badge rule: Movies tab hides "New Movie" strap, TV/Home keeps it
-    const showMovieBadge = tabName !== 'movies';
-    displayNewAdditions(combined, !append, container, showMovieBadge);
-    state.page++;
-  } catch (e) {
-    console.error("Error loading new additions:", e);
-    if (!append) container.innerHTML = '<p>Failed to load new additions</p>';
+
+    // 💾 SAVE TO CACHE
+    localStorage.setItem("newReleasesCache", JSON.stringify({
+      timestamp: Date.now(),
+      data: combined
+    }));
+
+    displayNewAdditions(combined, !append);
+    newAdditionsPage++;
+  } catch (error) {
+    console.error("Error loading new additions:", error);
+    if (!append) container.innerHTML = "<p>Failed to load new additions</p>";
   }
-  state.loading = false;
+  newAdditionsLoading = false;
 }
 
-// ✅ REFACTORED: Centralized New Additions Renderer
 function displayNewAdditions(items, clear, container, showMovieBadge) {
   if (clear) container.innerHTML = '';
   const currentYear = new Date().getFullYear();
