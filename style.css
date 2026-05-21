@@ -236,12 +236,17 @@ p {
     display: inline-block;
 }
 
-/* TV Badge - Green */
-.horizontal-scroll .release-badge.tv {
-    background: #28a745;
+/* New Show Badge (Green) */
+.horizontal-scroll .release-badge.show {
+background: #28a745;
 }
 
-/* Movie Badge - Blue */
+/* New Episodes Badge (Light Green) */
+.horizontal-scroll .release-badge.episodes {
+background: #acd455;
+}
+
+/* New Movie Badge (Blue) */
 .horizontal-scroll .release-badge.movie {
     background: #007bff;
 }
