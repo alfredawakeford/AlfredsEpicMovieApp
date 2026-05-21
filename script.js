@@ -1735,120 +1735,119 @@ document.addEventListener("keydown", (e) => {
     document.getElementById("movieModal").style.display = "none";
   }
 });
-// ✅ REPLACE YOUR EXISTING loadNewAdditions & displayNewAdditions WITH THESE
 
-async function loadNewAdditions(append = false) {
-  if (newAdditionsLoading) return;
-  
-  // 🛡️ SAFETY CHECK: Prevents crash if container is missing
-  const container = document.getElementById("newAdditions");
+// 📦 PER-TAB NEW ADDITIONS LOADER (With Midnight Cache)
+async function loadNewAdditions(tabName = 'home', append = false) {
+  const state = tabState[tabName];
+  if (!state || state.loading) return;
+  state.loading = true;
+
+  const containerId = `newAdditions-${tabName}`;
+  const container = document.getElementById(containerId);
   if (!container) {
-    console.warn("⚠️ New Additions container (#newAdditions) not found. Skipping load.");
+    console.warn(`⚠️ Container #${containerId} not found.`);
+    state.loading = false;
     return;
   }
 
-  //  MIDNIGHT CACHE LOGIC
-  const todayStr = new Date().toISOString().split('T')[0]; // e.g., "2024-05-21"
-  const cache = JSON.parse(localStorage.getItem("newReleasesCache") || "{}");
-  
-  // If we have valid cache for TODAY and this is an initial load, use it instantly!
+  // 🌙 Midnight Cache Logic (Resets automatically at 00:00)
+  const todayStr = new Date().toISOString().split('T')[0];
+  const cacheKey = `newReleasesCache_${tabName}`;
+  const cache = JSON.parse(localStorage.getItem(cacheKey) || "{}");
+
   if (!append && cache.date === todayStr && cache.data) {
-    console.log(`📦 Using cached new releases for ${todayStr}`);
-    displayNewAdditions(cache.data, true);
+    console.log(`📦 Using cached new releases for ${tabName} (${todayStr})`);
+    displayNewAdditions(cache.data, true, container, tabName === 'movies');
+    state.loading = false;
     return;
   }
 
-  // If loading fresh, show loading state and reset page counter
   if (!append) {
     container.innerHTML = "<p>Loading...</p>";
-    newAdditionsPage = 1;
+    state.page = 1;
   }
 
-  newAdditionsLoading = true;
   try {
     const [moviesRes, tvRes] = await Promise.all([
-      fetch(`https://api.themoviedb.org/3/movie/now_playing?api_key=${apiKey}&page=${newAdditionsPage}`),
-      fetch(`https://api.themoviedb.org/3/tv/on_the_air?api_key=${apiKey}&page=${newAdditionsPage}`)
+      fetch(`https://api.themoviedb.org/3/movie/now_playing?api_key=${apiKey}&page=${state.page}`),
+      fetch(`https://api.themoviedb.org/3/tv/on_the_air?api_key=${apiKey}&page=${state.page}`)
     ]);
     const moviesData = await moviesRes.json();
     const tvData = await tvRes.json();
 
-    const movies = moviesData.results.map(m => ({ ...m, media_type: "movie" }));
-    const tv = tvData.results.map(t => ({ ...t, media_type: "tv" }));
+    let combined = [
+      ...(moviesData.results || []).map(m => ({...m, media_type: 'movie'})),
+      ...(tvData.results || []).map(t => ({...t, media_type: 'tv'}))
+    ];
 
-    let combined = [...movies, ...tv];
-    combined.sort((a, b) => {
-      const dateA = new Date(a.release_date || a.first_air_date || 0);
-      const dateB = new Date(b.release_date || b.first_air_date || 0);
-      return dateB - dateA;
-    });
+    // 🎯 Filter by Tab
+    const filters = { home: 'all', movies: 'movie', tv: 'tv' };
+    const filter = filters[tabName] || 'all';
+    if (filter !== 'all') combined = combined.filter(i => i.media_type === filter);
 
-    // 💾 SAVE TO CACHE WITH TODAY'S DATE
-    localStorage.setItem("newReleasesCache", JSON.stringify({
-      date: todayStr,
-      data: combined
-    }));
+    // 📅 Sort by Newest
+    combined.sort((a, b) => new Date(b.release_date || b.first_air_date || 0) - new Date(a.release_date || a.first_air_date || 0));
 
-    displayNewAdditions(combined, !append);
-    newAdditionsPage++;
-  } catch (error) {
-    console.error("Error loading new additions:", error);
-    if (!append) container.innerHTML = "<p>Failed to load new additions</p>";
+    // 💾 Cache for Midnight Reset
+    localStorage.setItem(cacheKey, JSON.stringify({ date: todayStr, data: combined }));
+
+    // 🎨 Render (pass hideMovieBadge = true ONLY for movies tab)
+    displayNewAdditions(combined, !append, container, tabName === 'movies');
+    state.page++;
+  } catch (e) {
+    console.error("Error loading new additions:", e);
+    if (!append) container.innerHTML = '<p>Failed to load new additions</p>';
   }
-  newAdditionsLoading = false;
+  state.loading = false;
 }
 
-function displayNewAdditions(items, clear = true) {
-  // 🛡️ SAFETY CHECK
-  const container = document.getElementById("newAdditions");
-  if (!container) return; 
-
-  if (clear) container.innerHTML = "";
-  
+// 🎨 SHARED RENDERER (Works for Home, Movies & TV tabs)
+function displayNewAdditions(items, clear = true, container, hideMovieBadge = false) {
+  if (clear) container.innerHTML = '';
   const currentYear = new Date().getFullYear();
-  
+
   items.forEach(item => {
     if (!item.poster_path) return;
-    const div = document.createElement("div");
-    div.classList.add("movie");
+    const div = document.createElement('div');
+    div.classList.add('movie');
     const title = item.title || item.name;
-    const type = item.media_type === "movie" ? "Movie" : "TV";
-    const releaseDate = item.release_date || item.first_air_date || "";
-    const year = releaseDate.split("-")[0];
+    const type = item.media_type === 'movie' ? 'Movie' : 'TV';
+    const releaseDate = item.release_date || item.first_air_date || '';
+    const year = releaseDate.split('-')[0];
 
-    let badgeText = "New Movie";
-    if (item.media_type === "tv") {
-      badgeText = (year === String(currentYear)) ? "New Show" : "New Episodes";
+    let badgeHTML = '';
+    // ✅ Badge Rule: Hide "New Movie" strap on Movies tab, keep everything else
+    if (!(hideMovieBadge && item.media_type === 'movie')) {
+      let badgeText = 'New Movie';
+      if (item.media_type === 'tv') {
+        badgeText = (year === String(currentYear)) ? 'New Show' : 'New Episodes';
+      }
+      const badgeClass = item.media_type === 'tv' ? 'release-badge tv' : 'release-badge movie';
+      badgeHTML = `<div class="${badgeClass}">${badgeText}</div>`;
     }
-    const badgeClass = item.media_type === "tv" ? "release-badge tv" : "release-badge movie";
 
     div.innerHTML = `
       <img src="https://image.tmdb.org/t/p/w300${item.poster_path}" alt="${title}">
-      <div class="${badgeClass}">${badgeText}</div>
+      ${badgeHTML}
       <div class="movie-title">${title} (${type}) ${year}</div>
     `;
-
     div.onclick = () => showMovieDetails(item, false);
     container.appendChild(div);
   });
-
-  if (!clear || newAdditionsPage > 1) {
-    const loader = document.createElement("div");
-    loader.className = "new-additions-loader";
-    loader.innerHTML = "Loading more...";
-    container.appendChild(loader);
-  }
 }
-// ========== DOMContentLoaded ==========
+
+// 🔄 UNIFIED DOMContentLoaded & SCROLL SETUP
 document.addEventListener("DOMContentLoaded", () => {
-  ['home', 'movies', 'tv'].forEach(tab => loadNewAdditions(tab, false));
-  displayContinueWatching('all', 'continueWatching-home');
-  loadAlternateLinks();
-  loadTvAlternateLinks();
-  loadExternalLinks();
-  loadTvExternalLinks(); 
-  
-  // 🆕 Infinite Scroll for each New Additions container
+  // Initialize all tabs
+  ['home', 'movies', 'tv'].forEach(tab => {
+    loadNewAdditions(tab, false);
+    displayContinueWatching(
+      tab === 'home' ? 'all' : tab === 'movies' ? 'movie' : 'tv', 
+      `continueWatching-${tab}`
+    );
+  });
+
+  // Infinite Scroll for each tab
   ['home', 'movies', 'tv'].forEach(tab => {
     const container = document.getElementById(`newAdditions-${tab}`);
     if (!container) return;
@@ -1861,31 +1860,21 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // ✅ FIXED MODAL CLOSING LOGIC (removed trailing spaces in selectors)
+  // Load CSVs & External Links
+  loadAlternateLinks();
+  loadTvAlternateLinks();
+  loadExternalLinks();
+  loadTvExternalLinks();
+
+  // Modal Close Logic
   const movieModal = document.getElementById("movieModal");
   const closeBtn = document.querySelector(".close-btn");
   const videoModal = document.getElementById("videoModal");
   const videoCloseBtn = document.querySelector(".video-close");
-
-  if (closeBtn && movieModal) {
-    closeBtn.onclick = () => movieModal.style.display = "none";
-  }
-  if (videoCloseBtn && videoModal) {
-    videoCloseBtn.onclick = closeVideoModal;
-  }
-
-  if (movieModal) {
-    movieModal.onclick = (event) => {
-      if (event.target === movieModal) {
-        movieModal.style.display = "none";
-      }
-    };
-  }
-  if (videoModal) {
-    videoModal.onclick = (e) => {
-      if (e.target === videoModal) closeVideoModal();
-    };
-  }
+  if (closeBtn && movieModal) closeBtn.onclick = () => movieModal.style.display = "none";
+  if (videoCloseBtn && videoModal) videoCloseBtn.onclick = closeVideoModal;
+  if (movieModal) movieModal.onclick = e => { if (e.target === movieModal) movieModal.style.display = "none"; };
+  if (videoModal) videoModal.onclick = e => { if (e.target === videoModal) closeVideoModal(); };
 });
 
 // Search filter buttons
