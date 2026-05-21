@@ -1818,11 +1818,14 @@ function displayNewAdditions(items, clear = true, container, hideMovieBadge = fa
     let badgeHTML = '';
     // ✅ Badge Rule: Hide "New Movie" strap on Movies tab, keep everything else
     if (!(hideMovieBadge && item.media_type === 'movie')) {
-      let badgeText = 'New Movie';
-      if (item.media_type === 'tv') {
-        badgeText = (year === String(currentYear)) ? 'New Show' : 'New Episodes';
+      let badgeText = "New Movie";
+      let badgeClass = "release-badge movie";
+
+      if (item.media_type === "tv") {
+        badgeText = (year === String(currentYear)) ? "New Show" : "New Episodes";
+        // Assign specific class based on the badge text
+        badgeClass = badgeText === "New Show" ? "release-badge show" : "release-badge episodes";
       }
-      const badgeClass = item.media_type === 'tv' ? 'release-badge tv' : 'release-badge movie';
       badgeHTML = `<div class="${badgeClass}">${badgeText}</div>`;
     }
 
