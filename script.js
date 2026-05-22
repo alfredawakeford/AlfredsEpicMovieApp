@@ -12,6 +12,11 @@ let currentVideoState = {
   id: null, mediaType: null, season: null, episode: null,
   itemTitle: null, totalEpisodesInSeason: 0, totalSeasons: 0
 };
+let currentSearchMode = 'title';
+let isPersonSearch = false;
+let personSearchTimeout = null;
+let currentPersonResults = [];
+
 // STORAGE KEYS
 const STORAGE_WATCHED = "movieBrowser_watched";
 const STORAGE_WATCHLIST = "movieBrowser_watchlist";
@@ -667,6 +672,172 @@ function displayWatchlist() {
     container.appendChild(div);
   });
 }
+
+async function fetchPersonSearch(query) {
+  try {
+    const res = await fetch(`https://api.themoviedb.org/3/search/person?api_key=${apiKey}&query=${encodeURIComponent(query)}&include_adult=false`);
+    const data = await res.json();
+    renderPersonDropdown(data.results.slice(0, 8)); // Limit to 8 for performance
+  } catch (e) {
+    console.warn("Person search failed:", e);
+  }
+}
+
+function renderPersonDropdown(results) {
+  const dropdown = document.getElementById('search-dropdown');
+  dropdown.innerHTML = '';
+  if (!results || results.length === 0) {
+    dropdown.style.display = 'none';
+    return;
+  }
+  
+  results.forEach(person => {
+    const div = document.createElement('div');
+    div.className = 'search-dropdown-item';
+    
+    const imgUrl = person.profile_path ? `https://image.tmdb.org/t/p/w185${person.profile_path}` : '';
+    const name = person.name;
+    
+    let roleText = '';
+    let knownForText = '';
+    
+    if (currentSearchMode === 'writer') {
+      const crewRoles = person.known_for?.flatMap(m => 
+        (m.crew || []).filter(c => c.id === person.id).map(c => c.job || c.department)
+      ).filter(Boolean);
+      const uniqueRoles = [...new Set(crewRoles)].slice(0, 3).join(', ');
+      if (uniqueRoles) roleText = `Roles: ${uniqueRoles}`;
+      knownForText = person.known_for?.slice(0, 2).map(m => m.title || m.name).join(', ') || '';
+    } else if (currentSearchMode === 'actor') {
+      knownForText = person.known_for?.slice(0, 3).map(m => m.title || m.name).join(', ') || '';
+    }
+    
+    div.innerHTML = `
+      ${imgUrl ? `<img src="${imgUrl}" alt="${name}">` : `<div style="width:40px;height:60px;background:#333;border-radius:4px;"></div>`}
+      <div class="search-dropdown-info">
+        <div class="search-dropdown-name">${name}</div>
+        ${roleText ? `<div class="search-dropdown-role">${roleText}</div>` : ''}
+        ${knownForText ? `<div class="search-dropdown-known">Known for: ${knownForText}</div>` : ''}
+      </div>
+    `;
+    
+    div.onclick = () => selectPerson(person.id, name);
+    dropdown.appendChild(div);
+  });
+  
+  dropdown.style.display = 'block';
+}
+
+async function selectPerson(personId, personName) {
+  document.getElementById('search-dropdown').style.display = 'none';
+  searchInput.value = personName;
+  searchInput.placeholder = `Searching works by ${personName}...`;
+  
+  isPersonSearch = true;
+  currentFilter = 'all';
+  resultsDiv.innerHTML = '<p>Loading filmography...</p>';
+  
+  // Reset filter UI
+  document.querySelectorAll('.search-filters .filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('.search-filters .filter-btn[data-filter="all"]').classList.add('active');
+  
+  try {
+    const res = await fetch(`https://api.themoviedb.org/3/person/${personId}/combined_credits?api_key=${apiKey}`);
+    const data = await res.json();
+    
+    const allWorks = new Map();
+    
+    // Merge Cast
+    data.cast?.forEach(item => {
+      if (item.title || item.name) {
+        const key = `${item.media_type}_${item.id}`;
+        allWorks.set(key, { ...item, credit_type: 'cast', character: item.character });
+      }
+    });
+    
+    // Merge Crew (combine if exists)
+    data.crew?.forEach(item => {
+      if (item.title || item.name) {
+        const key = `${item.media_type}_${item.id}`;
+        if (allWorks.has(key)) {
+          const existing = allWorks.get(key);
+          existing.crew_job = item.job;
+          existing.crew_department = item.department;
+        } else {
+          allWorks.set(key, { ...item, credit_type: 'crew', crew_job: item.job, crew_department: item.department });
+        }
+      }
+    });
+    
+    let worksArray = Array.from(allWorks.values());
+    
+    // Sort Alphabetically
+    worksArray.sort((a, b) => {
+      const titleA = (a.title || a.name || '').toLowerCase();
+      const titleB = (b.title || b.name || '').toLowerCase();
+      return titleA.localeCompare(titleB);
+    });
+    
+    currentPersonResults = worksArray;
+    displayPersonResults(worksArray, false);
+    
+  } catch (e) {
+    console.error("Failed to load filmography:", e);
+    resultsDiv.innerHTML = '<p>Failed to load filmography.</p>';
+  }
+}
+
+function displayPersonResults(items, append = false) {
+  if (!append) resultsDiv.innerHTML = "";
+  
+  const filteredItems = items.filter(item => {
+    if (currentFilter === "all") return true;
+    return item.media_type === currentFilter;
+  });
+  
+  if (filteredItems.length === 0 && !append) {
+    resultsDiv.innerHTML = "<p>No results found for this filter.</p>";
+    return;
+  }
+  
+  filteredItems.forEach(item => {
+    if (!item.poster_path) return;
+    const div = document.createElement("div");
+    div.classList.add("movie");
+    const title = item.title || item.name;
+    const type = item.media_type === "movie" ? "Movie" : "TV";
+    const year = (item.release_date || item.first_air_date || "").split("-")[0];
+    
+    // ✅ Removed department badge
+    
+    div.innerHTML = `
+      <img src="https://image.tmdb.org/t/p/w300${item.poster_path}" alt="${title}">
+      <div class="movie-title">${title} (${type}) ${year}</div>
+    `;
+    
+    div.oncontextmenu = (e) => {
+      e.preventDefault();
+      const watchlist = getWatchlist();
+      const inWatchlist = watchlist.some(w => w.id === item.id && w.media_type === item.media_type);
+      if (inWatchlist) removeFromWatchlist(item);
+      else addToWatchlist(item);
+      displayPersonResults(items, append);
+    };
+    
+    div.onclick = () => showMovieDetails(item, false);
+    resultsDiv.appendChild(div);
+  });
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+  const dropdown = document.getElementById('search-dropdown');
+  const wrapper = document.querySelector('.search-input-wrapper');
+  if (dropdown && wrapper && !wrapper.contains(e.target)) {
+    dropdown.style.display = 'none';
+  }
+});
+
 // ========== CSV EXPORT ==========
 document.getElementById("exportCsv")?.addEventListener("click", () => {
   const watched = getWatchedData();
@@ -735,11 +906,29 @@ function score(item, query) {
 }
 searchInput.addEventListener("input", async () => {
   const query = searchInput.value.trim();
-  currentQuery = query;
-  currentPage = 1;
-  resultsDiv.innerHTML = "";
-  if (query.length < 3) return;
-  await loadResults();
+  clearTimeout(personSearchTimeout);
+  
+  // Hide dropdown if switching to title/genre or clearing
+  if (currentSearchMode === 'title' || currentSearchMode === 'genre') {
+    document.getElementById('search-dropdown').style.display = 'none';
+    isPersonSearch = false;
+    
+    currentQuery = query;
+    currentPage = 1;
+    resultsDiv.innerHTML = "";
+    if (query.length < 3) return;
+    await loadResults();
+    return;
+  }
+  
+  // Person search mode
+  if (query.length < 2) {
+    document.getElementById('search-dropdown').style.display = 'none';
+    return;
+  }
+  
+  // Debounce person search (300ms)
+  personSearchTimeout = setTimeout(() => fetchPersonSearch(query), 300);
 });
 async function loadResults() {
   if (loading || !currentQuery) return;
@@ -810,7 +999,16 @@ function displayResults(items, append = false) {
     resultsDiv.appendChild(div);
   });
 }
+
 window.addEventListener("scroll", () => {
+  // ✅ 1. Disable infinite scroll if viewing a person's filmography
+  if (isPersonSearch) return; 
+  
+  // ✅ 2. Disable infinite scroll if in Actor/Writer mode
+  // (Prevents loading random movie results while the person dropdown is open)
+  if (currentSearchMode === 'actor' || currentSearchMode === 'writer') return;
+
+  // ✅ 3. Standard infinite scroll for Title/Genre search
   if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 200) {
     loadResults();
   }
@@ -1880,30 +2078,39 @@ document.addEventListener("DOMContentLoaded", () => {
   if (videoModal) videoModal.onclick = e => { if (e.target === videoModal) closeVideoModal(); };
 });
 
-// ✅ Search Type Buttons (Title, Genre, Actor, Writer)
 document.querySelectorAll('.search-mode-buttons .filter-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    // Only toggle active within this specific group
     document.querySelectorAll('.search-mode-buttons .filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+    currentSearchMode = btn.dataset.type;
     
-    // ️ Future functionality placeholder:
-    // currentSearchType = btn.dataset.type;
-    // console.log("Now searching by:", currentSearchType);
+    // Reset states on mode switch
+    document.getElementById('search-dropdown').style.display = 'none';
+    isPersonSearch = false;
+    searchInput.value = '';
+    resultsDiv.innerHTML = '';
+    lastSearchResults = [];
+    currentPersonResults = [];
+    
+    // Update placeholder
+    if (currentSearchMode === 'title' || currentSearchMode === 'genre') {
+      searchInput.placeholder = "Search movies or TV shows...";
+    } else {
+      searchInput.placeholder = "Search for a person...";
+    }
   });
 });
 
 // ✅ Filter Type Buttons (All, Movies, TV Shows)
 document.querySelectorAll('.search-filters .filter-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    // Only toggle active within this specific group
     document.querySelectorAll('.search-filters .filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    
     currentFilter = btn.dataset.filter;
     
-    // Re-display current results with new filter
-    if (lastSearchResults.length > 0) {
+    if (isPersonSearch) {
+      displayPersonResults(currentPersonResults, false);
+    } else if (lastSearchResults.length > 0) {
       displayResults(lastSearchResults, false);
     }
   });
