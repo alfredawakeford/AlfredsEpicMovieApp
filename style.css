@@ -238,17 +238,17 @@ p {
 
 /* New Show Badge (Green) */
 .horizontal-scroll .release-badge.show {
-background: #28a745;
+background: #486919;
 }
 
-/* New Episodes Badge (Light Green) */
+/* New Episodes Badge (Dark Green) */
 .horizontal-scroll .release-badge.episodes {
-background: #acd455;
+background: #28a745;
 }
 
 /* New Movie Badge (Blue) */
 .horizontal-scroll .release-badge.movie {
-    background: #007bff;
+    background: #045ab8;
 }
 
 /* ========================================
@@ -930,3 +930,40 @@ UNRELEASED EPISODES
   pointer-events: none;
   background: #555 !important;
 }
+
+/* ========================================
+SEARCH SECTION LAYOUT
+======================================== */
+.search-section {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 20px;
+    flex-wrap: wrap; /* Ensures it doesn't break on small screens */
+}
+
+/* Adjust existing input to fit the row */
+.search-section input#search {
+    flex: 1;
+    min-width: 250px;
+    margin-bottom: 0; /* Remove default margin */
+}
+
+.search-filters-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    white-space: nowrap;
+}
+
+.search-label {
+    color: #aaa;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.search-mode-buttons {
+    display: flex;
+    gap: 8px;
+}
+
