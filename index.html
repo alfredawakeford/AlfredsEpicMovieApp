@@ -47,7 +47,19 @@
   
   <!-- SEARCH TAB -->
   <div id="search-tab" class="tab-content">
-    <input type="text" id="search" placeholder="Search movies or TV shows...">
+    <div class="search-section">
+      <input type="text" id="search" placeholder="Search movies or TV shows..." autocomplete="off">
+    
+      <div class="search-filters-group">
+        <span class="search-label">Search by:</span>
+        <div class="search-mode-buttons">
+          <button class="filter-btn active" data-type="title">Title</button>
+          <button class="filter-btn" data-type="genre">Genre</button>
+          <button class="filter-btn" data-type="actor">Actor</button>
+          <button class="filter-btn" data-type="writer">Writer/Director</button>
+        </div>
+      </div>
+    </div>
     <div class="search-filters">
       <button class="filter-btn active" data-filter="all">All</button>
       <button class="filter-btn" data-filter="movie">Movies</button>
@@ -58,7 +70,7 @@
   
   <!-- WATCHLIST TAB -->
   <div id="watchlist-tab" class="tab-content">
-    <h2>Your Watchlist</h2>
+    <h2>Your Watchlist‎</h2>
     <div id="watchlist" class="grid"></div>
   </div>
   
