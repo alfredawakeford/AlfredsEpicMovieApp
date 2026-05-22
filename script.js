@@ -1880,15 +1880,26 @@ document.addEventListener("DOMContentLoaded", () => {
   if (videoModal) videoModal.onclick = e => { if (e.target === videoModal) closeVideoModal(); };
 });
 
-// Search filter buttons
-
-document.querySelectorAll('.filter-btn').forEach(btn => {
+// ✅ Search Type Buttons (Title, Genre, Actor, Writer)
+document.querySelectorAll('.search-mode-buttons .filter-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    // Update active state
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    // Only toggle active within this specific group
+    document.querySelectorAll('.search-mode-buttons .filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     
-    // Update filter
+    // ️ Future functionality placeholder:
+    // currentSearchType = btn.dataset.type;
+    // console.log("Now searching by:", currentSearchType);
+  });
+});
+
+// ✅ Filter Type Buttons (All, Movies, TV Shows)
+document.querySelectorAll('.search-filters .filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    // Only toggle active within this specific group
+    document.querySelectorAll('.search-filters .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    
     currentFilter = btn.dataset.filter;
     
     // Re-display current results with new filter
