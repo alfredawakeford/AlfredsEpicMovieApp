@@ -698,25 +698,13 @@ function renderPersonDropdown(results) {
     const imgUrl = person.profile_path ? `https://image.tmdb.org/t/p/w185${person.profile_path}` : '';
     const name = person.name;
     
-    let roleText = '';
-    let knownForText = '';
-    
-    if (currentSearchMode === 'writer') {
-      const crewRoles = person.known_for?.flatMap(m => 
-        (m.crew || []).filter(c => c.id === person.id).map(c => c.job || c.department)
-      ).filter(Boolean);
-      const uniqueRoles = [...new Set(crewRoles)].slice(0, 3).join(', ');
-      if (uniqueRoles) roleText = `Roles: ${uniqueRoles}`;
-      knownForText = person.known_for?.slice(0, 2).map(m => m.title || m.name).join(', ') || '';
-    } else if (currentSearchMode === 'actor') {
-      knownForText = person.known_for?.slice(0, 3).map(m => m.title || m.name).join(', ') || '';
-    }
+    // Extract known for titles
+    const knownForText = person.known_for?.slice(0, 3).map(m => m.title || m.name).join(', ') || '';
     
     div.innerHTML = `
       ${imgUrl ? `<img src="${imgUrl}" alt="${name}">` : `<div style="width:40px;height:60px;background:#333;border-radius:4px;"></div>`}
       <div class="search-dropdown-info">
         <div class="search-dropdown-name">${name}</div>
-        ${roleText ? `<div class="search-dropdown-role">${roleText}</div>` : ''}
         ${knownForText ? `<div class="search-dropdown-known">Known for: ${knownForText}</div>` : ''}
       </div>
     `;
@@ -777,7 +765,9 @@ async function selectPerson(personId, personName) {
       const titleB = (b.title || b.name || '').toLowerCase();
       return titleA.localeCompare(titleB);
     });
-    
+
+    worksArray.forEach(w => w._personName = personName);
+
     currentPersonResults = worksArray;
     displayPersonResults(worksArray, false);
     
@@ -808,11 +798,43 @@ function displayPersonResults(items, append = false) {
     const type = item.media_type === "movie" ? "Movie" : "TV";
     const year = (item.release_date || item.first_air_date || "").split("-")[0];
     
-    // ✅ Removed department badge
+    // ✅ Role badge for People search - with Multiple detection
+    let badgeHTML = '';
+    if (currentSearchMode === 'people') {
+      const roles = new Set();
+      
+      // Collect all crew departments
+      if (item.crew_department) {
+        roles.add(item.crew_department);
+      }
+      
+      // Collect all crew jobs (if different from department)
+      if (item.crew_job && item.crew_job !== item.crew_department) {
+        roles.add(item.crew_job);
+      }
+      
+      // Add "Acting" if they're in cast
+      if (item.credit_type === 'cast') {
+        roles.add('Acting');
+      }
+      
+      // Determine badge text
+      let roleText = '';
+      if (roles.size === 0) {
+        roleText = 'Unknown';
+      } else if (roles.size === 1) {
+        roleText = Array.from(roles)[0];
+      } else {
+        roleText = 'Multiple';
+      }
+      
+      badgeHTML = `<div class="role-badge">${roleText}</div>`;
+    }
     
     div.innerHTML = `
       <img src="https://image.tmdb.org/t/p/w300${item.poster_path}" alt="${title}">
-      <div class="movie-title">${title} (${type}) ${year}</div>
+      ${badgeHTML}
+      <div class="movie-title">${title} (${type})</div>
     `;
     
     div.oncontextmenu = (e) => {
@@ -824,11 +846,24 @@ function displayPersonResults(items, append = false) {
       displayPersonResults(items, append);
     };
     
-    div.onclick = () => showMovieDetails(item, false);
+    div.onclick = () => {
+      // ✅ Collect all roles for this specific film/show
+      const roles = new Set();
+      if (item.crew_department) roles.add(item.crew_department);
+      if (item.crew_job && item.crew_job !== item.crew_department) roles.add(item.crew_job);
+      if (item.credit_type === 'cast') roles.add('Acting');
+  
+      const roleStr = roles.size > 0 ? Array.from(roles).join(', ') : 'Unknown';
+  
+      // ✅ Pass role data to the modal
+      showMovieDetails(item, false, { 
+        roles: roleStr, 
+        personName: item._personName || 'This person' 
+      });
+    };
     resultsDiv.appendChild(div);
   });
 }
-
 // Close dropdown when clicking outside
 document.addEventListener('click', (e) => {
   const dropdown = document.getElementById('search-dropdown');
@@ -1080,7 +1115,7 @@ function renderExternalButtons(tmdbId, modalBody) {
   }
 }
 // ========== MODAL & VIDEO FUNCTIONS ==========
-async function showMovieDetails(item, fromContinueWatching = false) {
+async function showMovieDetails(item, fromContinueWatching = false, personRoleData = null) {
   const modal = document.getElementById("movieModal");
   const modalBody = document.getElementById("modalBody");
   if (!modal || !modalBody) return;
@@ -1091,21 +1126,31 @@ async function showMovieDetails(item, fromContinueWatching = false) {
     const endpoint = item.media_type === "movie" ? "movie" : "tv";
     const res = await fetch(`https://api.themoviedb.org/3/${endpoint}/${item.id}?api_key=${apiKey}&language=en-US`);
     const data = await res.json();
+    
     const title = data.title || data.name;
     const type = item.media_type === "movie" ? "Movie" : "TV Show";
     const releaseDate = data.release_date || data.first_air_date || "N/A";
     const year = releaseDate.split("-")[0];
     const rating = data.vote_average ? data.vote_average.toFixed(1) + "/10" : "N/A";
-    const runtime = item.media_type === "movie" && data.runtime ? data.runtime + " min" : 
+    const runtime = item.media_type === "movie" && data.runtime ? data.runtime + " min" :
                     item.media_type === "tv" && data.episode_run_time?.[0] ? data.episode_run_time[0] + " min/ep" : "N/A";
     const genres = data.genres?.map(g => g.name).join(", ") || "N/A";
     
+    // ✅ Build Role HTML if coming from People search
+    let roleHTML = '';
+    if (personRoleData) {
+      const { roles, personName } = personRoleData;
+      const isPlural = roles.includes(',') || roles === 'Multiple';
+      roleHTML = `<div class="modal-info"><strong>${personName}'s ${isPlural ? 'roles' : 'role'} in ${title}  ${isPlural ? 'are' : 'is'}:</strong> ${roles}</div>`;
+    }
+
     const watched = getWatchedData();
     const key = `${item.media_type}_${item.id}`;
     const tracked = watched[key];
     const currentSeason = tracked?.currentSeason || null;
     const currentEpisode = tracked?.currentEpisode || null;
     const isInWatched = tracked !== undefined;
+
     
     // ✅ Check if tracked TV episode is unreleased
     let isCurrentUnreleased = false;
@@ -1191,6 +1236,7 @@ async function showMovieDetails(item, fromContinueWatching = false) {
       <h2 class="modal-title">${title} (${year})</h2>
       <div class="modal-info">${type} • ${rating} • ${runtime}</div>
       <div class="modal-info"><strong>Genres:</strong> ${genres}</div>
+      ${roleHTML}
       <p class="modal-overview">${data.overview || "No overview available."}</p>
       <div class="modal-actions">
         ${actionButtonsHTML}
