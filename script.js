@@ -42,7 +42,7 @@ const externalServices = [
 
 let externalLinksMap = new Map(); // Map<tmdbId, Map<serviceName, {link, logo, color}>>
 
-// ========== ALTERNATE VIDEO LINKS ==========
+// ========== ALTERNATE VIDEO LINKS =========
 let alternateLinks = new Map();
 let tvAlternateLinks = new Map();
 
