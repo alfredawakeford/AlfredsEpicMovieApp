@@ -16,6 +16,9 @@ let currentSearchMode = 'title';
 let isPersonSearch = false;
 let personSearchTimeout = null;
 let currentPersonResults = [];
+let currentKeywordId = null;
+let keywordSearchTimeout = null;
+let isKeywordSearch = false;
 
 // STORAGE KEYS
 const STORAGE_WATCHED = "movieBrowser_watched";
@@ -673,6 +676,142 @@ function displayWatchlist() {
   });
 }
 
+// ✅ Fetch Keywords from TMDB
+async function fetchKeywordSearch(query) {
+  try {
+    const res = await fetch(`https://api.themoviedb.org/3/search/keyword?api_key=${apiKey}&query=${encodeURIComponent(query)}`);
+    const data = await res.json();
+    renderKeywordDropdown(data.results.slice(0, 8)); // Limit to 8
+  } catch (e) {
+    console.warn("Keyword search failed:", e);
+  }
+}
+
+// ✅ Render Keyword Dropdown
+function renderKeywordDropdown(results) {
+  const dropdown = document.getElementById('search-dropdown');
+  dropdown.innerHTML = '';
+  if (!results || results.length === 0) {
+    dropdown.style.display = 'none';
+    return;
+  }
+  
+  results.forEach(kw => {
+    const div = document.createElement('div');
+    div.className = 'search-dropdown-item';
+    
+    div.innerHTML = `
+      <div class="search-dropdown-info" style="width:100%">
+        <div class="search-dropdown-name">${kw.name}</div>
+      </div>
+    `;
+    
+    div.onclick = () => selectKeyword(kw.id, kw.name);
+    dropdown.appendChild(div);
+  });
+  
+  dropdown.style.display = 'block';
+}
+
+// ✅ Select a Keyword and Load Results
+async function selectKeyword(keywordId, keywordName) {
+  document.getElementById('search-dropdown').style.display = 'none';
+  searchInput.value = keywordName;
+  searchInput.placeholder = `Searching keyword: ${keywordName}...`;
+  
+  isKeywordSearch = true;
+  currentKeywordId = keywordId;
+  currentFilter = 'all';
+  
+  // Reset filter UI
+  document.querySelectorAll('.search-filters .filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('.search-filters .filter-btn[data-filter="all"]').classList.add('active');
+  
+  resultsDiv.innerHTML = '<p>Loading movies & shows...</p>';
+  currentPage = 1;
+  
+  await loadKeywordResults(false);
+}
+
+// ✅ Load Movies/TVs for a specific Keyword
+async function loadKeywordResults(append = false) {
+  if (!currentKeywordId) return;
+  loading = true;
+  
+  try {
+    // ✅ Load 2 pages initially to ensure enough content for scrollbar
+    const pagesToLoad = append ? [currentPage] : [currentPage, currentPage + 1];
+    let allResults = [];
+    
+    for (const page of pagesToLoad) {
+      const [movieRes, tvRes] = await Promise.all([
+        fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${apiKey}&with_keywords=${currentKeywordId}&page=${page}`),
+        fetch(`https://api.themoviedb.org/3/discover/tv?api_key=${apiKey}&with_keywords=${currentKeywordId}&page=${page}`)
+      ]);
+      
+      const movieData = await movieRes.json();
+      const tvData = await tvRes.json();
+      
+      const movies = movieData.results.map(m => ({ ...m, media_type: "movie" }));
+      const tv = tvData.results.map(t => ({ ...t, media_type: "tv" }));
+      
+      allResults = [...allResults, ...movies, ...tv];
+    }
+    
+    // Sort by popularity and remove duplicates
+    allResults.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+    const uniqueResults = Array.from(new Map(allResults.map(item => [`${item.media_type}_${item.id}`, item])).values());
+    
+    displayKeywordResults(uniqueResults, !append);
+    currentPage += pagesToLoad.length;
+  } catch (error) {
+    console.error("Error loading keyword results:", error);
+  }
+  loading = false;
+}
+
+// ✅ Display Keyword Results
+function displayKeywordResults(items, clear = true) {
+  if (clear) resultsDiv.innerHTML = "";
+  
+  const filteredItems = items.filter(item => {
+    if (currentFilter === "all") return true;
+    return item.media_type === currentFilter;
+  });
+  
+  if (filteredItems.length === 0 && clear) {
+    resultsDiv.innerHTML = "<p>No results found for this filter.</p>";
+    return;
+  }
+  
+  filteredItems.forEach(item => {
+    if (!item.poster_path) return;
+    const div = document.createElement("div");
+    div.classList.add("movie");
+    const title = item.title || item.name;
+    const type = item.media_type === "movie" ? "Movie" : "TV";
+    const year = (item.release_date || item.first_air_date || "").split("-")[0];
+    
+    div.innerHTML = `
+      <img src="https://image.tmdb.org/t/p/w300${item.poster_path}" alt="${title}">
+      <div class="movie-title">${title} (${type}) ${year}</div>
+    `;
+    
+    div.oncontextmenu = (e) => {
+      e.preventDefault();
+      const watchlist = getWatchlist();
+      const inWatchlist = watchlist.some(w => w.id === item.id && w.media_type === item.media_type);
+      if (inWatchlist) removeFromWatchlist(item);
+      else addToWatchlist(item);
+      // Re-render isn't strictly needed for keyword search as we don't store state in the DOM list usually, 
+      // but keeping it consistent is good.
+    };
+    
+    div.onclick = () => showMovieDetails(item, false);
+    resultsDiv.appendChild(div);
+  });
+}
+
 async function fetchPersonSearch(query) {
   try {
     const res = await fetch(`https://api.themoviedb.org/3/search/person?api_key=${apiKey}&query=${encodeURIComponent(query)}&include_adult=false`);
@@ -723,7 +862,7 @@ async function selectPerson(personId, personName) {
   
   isPersonSearch = true;
   currentFilter = 'all';
-  resultsDiv.innerHTML = '<p>Loading filmography...</p>';
+  resultsDiv.innerHTML = '<p>Loading movieography...</p>';
   
   // Reset filter UI
   document.querySelectorAll('.search-filters .filter-btn').forEach(b => b.classList.remove('active'));
@@ -772,8 +911,8 @@ async function selectPerson(personId, personName) {
     displayPersonResults(worksArray, false);
     
   } catch (e) {
-    console.error("Failed to load filmography:", e);
-    resultsDiv.innerHTML = '<p>Failed to load filmography.</p>';
+    console.error("Failed to load movieography:", e);
+    resultsDiv.innerHTML = '<p>Failed to load movieography.</p>';
   }
 }
 
@@ -847,7 +986,7 @@ function displayPersonResults(items, append = false) {
     };
     
     div.onclick = () => {
-      // ✅ Collect all roles for this specific film/show
+      // ✅ Collect all roles for this specific movie/show
       const roles = new Set();
       if (item.crew_department) roles.add(item.crew_department);
       if (item.crew_job && item.crew_job !== item.crew_department) roles.add(item.crew_job);
@@ -942,11 +1081,13 @@ function score(item, query) {
 searchInput.addEventListener("input", async () => {
   const query = searchInput.value.trim();
   clearTimeout(personSearchTimeout);
+  clearTimeout(keywordSearchTimeout);
   
-  // Hide dropdown if switching to title/genre or clearing
-  if (currentSearchMode === 'title' || currentSearchMode === 'genre') {
+  // 1. TITLE MODE
+  if (currentSearchMode === 'title') {
     document.getElementById('search-dropdown').style.display = 'none';
     isPersonSearch = false;
+    isKeywordSearch = false;
     
     currentQuery = query;
     currentPage = 1;
@@ -956,13 +1097,25 @@ searchInput.addEventListener("input", async () => {
     return;
   }
   
-  // Person search mode
+  // 2. GENRE (KEYWORD) MODE
+  if (currentSearchMode === 'genre') {
+    isPersonSearch = false;
+    
+    if (query.length < 2) {
+      document.getElementById('search-dropdown').style.display = 'none';
+      return;
+    }
+    
+    // Debounce keyword search
+    keywordSearchTimeout = setTimeout(() => fetchKeywordSearch(query), 300);
+    return;
+  }
+  
+  // 3. PEOPLE MODE
   if (query.length < 2) {
     document.getElementById('search-dropdown').style.display = 'none';
     return;
   }
-  
-  // Debounce person search (300ms)
   personSearchTimeout = setTimeout(() => fetchPersonSearch(query), 300);
 });
 async function loadResults() {
@@ -1036,14 +1189,18 @@ function displayResults(items, append = false) {
 }
 
 window.addEventListener("scroll", () => {
-  // ✅ 1. Disable infinite scroll if viewing a person's filmography
+  // ✅ 1. Disable if viewing a person's movieography
   if (isPersonSearch) return; 
   
-  // ✅ 2. Disable infinite scroll if in Actor/Writer mode
-  // (Prevents loading random movie results while the person dropdown is open)
-  if (currentSearchMode === 'actor' || currentSearchMode === 'writer') return;
+  // ✅ 2. Handle Keyword Search Infinite Scroll
+  if (isKeywordSearch) {
+    if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 200) {
+      loadKeywordResults(true); // true = append
+    }
+    return;
+  }
 
-  // ✅ 3. Standard infinite scroll for Title/Genre search
+  // ✅ 3. Standard Title Search Infinite Scroll
   if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 200) {
     loadResults();
   }
@@ -2133,16 +2290,20 @@ document.querySelectorAll('.search-mode-buttons .filter-btn').forEach(btn => {
     // Reset states on mode switch
     document.getElementById('search-dropdown').style.display = 'none';
     isPersonSearch = false;
+    isKeywordSearch = false;
+    currentKeywordId = null;
     searchInput.value = '';
     resultsDiv.innerHTML = '';
     lastSearchResults = [];
     currentPersonResults = [];
     
     // Update placeholder
-    if (currentSearchMode === 'title' || currentSearchMode === 'genre') {
-      searchInput.placeholder = "Search movies or TV shows...";
+    if (currentSearchMode === 'title') {
+      searchInput.placeholder = "Search for a movie or TV show...";
+    } else if (currentSearchMode === 'genre') {
+      searchInput.placeholder = "Search for a genre (e.g. Science Fiction)...";
     } else {
-      searchInput.placeholder = "Search for a person...";
+      searchInput.placeholder = "Search for a person (e.g. Tom Hanks)...";
     }
   });
 });
@@ -2156,6 +2317,15 @@ document.querySelectorAll('.search-filters .filter-btn').forEach(btn => {
     
     if (isPersonSearch) {
       displayPersonResults(currentPersonResults, false);
+    } else if (isKeywordSearch) {
+      // Re-fetch page 1 for the new filter? Or just re-filter existing?
+      // Since we fetch Movies and TV separately in loadKeywordResults, 
+      // it's easier to just re-run the display function if we have the data.
+      // BUT, loadKeywordResults combines them. 
+      // To keep it simple: Reset to page 1 and reload.
+      currentPage = 1;
+      resultsDiv.innerHTML = '<p>Loading...</p>';
+      loadKeywordResults(false);
     } else if (lastSearchResults.length > 0) {
       displayResults(lastSearchResults, false);
     }
