@@ -28,7 +28,7 @@ const tabState = {
   movies: { page: 1, loading: false },
   tv: { page: 1, loading: false }
 };
-// ========== EXTERNAL STREAMING SERVICES CONFIG ==========
+// ========== EXTERNAL STREAMING SERVICES CONFIG =========
 const externalServices = [
   { name: "BBC iPlayer", logo: "https://upload.wikimedia.org/wikipedia/en/f/fd/BBC_iPlayer_logo_%282021%29.svg", color: "#000000" },
   { name: "Netflix", logo: "https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg", color: "#101010" },
