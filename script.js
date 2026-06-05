@@ -39,44 +39,49 @@ const tabState = {
 };
 
 // ========== CLIENT-SIDE ROUTING ==========
+// ========== CLIENT-SIDE ROUTING ==========
 const routes = {
-  home: { pattern: /^\/home(?:\/(movie|tv)\/(\d+))?$/, tab: 'home' },
-  movies: { pattern: /^\/movies(?:\/(movie|tv)\/(\d+))?$/, tab: 'movies' },
-  tv: { pattern: /^\/tv(?:\/(movie|tv)\/(\d+))?$/, tab: 'tv' },
-  search: { pattern: /^\/search(?:\/(movie|tv)\/(\d+))?$/, tab: 'search' },
-  watchlist: { pattern: /^\/watchlist(?:\/(movie|tv)\/(\d+))?$/, tab: 'watchlist' },
-  watch: { pattern: /^\/(movie|tv)\/(\d+)\/watch$/, type: 'watch' }
+  home: { pattern: /^#\/home(?:\/(movie|tv)\/(\d+))?$/, tab: 'home' },
+  movies: { pattern: /^#\/movies(?:\/(movie|tv)\/(\d+))?$/, tab: 'movies' },
+  tv: { pattern: /^#\/tv(?:\/(movie|tv)\/(\d+))?$/, tab: 'tv' },
+  search: { pattern: /^#\/search(?:\/(movie|tv)\/(\d+))?$/, tab: 'search' },
+  watchlist: { pattern: /^#\/watchlist(?:\/(movie|tv)\/(\d+))?$/, tab: 'watchlist' },
+  watch: { pattern: /^#\/(movie|tv)\/(\d+)\/watch$/, type: 'watch' }
 };
 
 function parseRoute(path) {
+  // Use hash if available, otherwise use pathname
+  const hash = path.includes('#') ? path.split('#')[1] || '/' : '/';
+  const cleanPath = hash.startsWith('/') ? hash : '/' + hash;
+  
   for (const [name, config] of Object.entries(routes)) {
-    const match = path.match(config.pattern);
+    const match = cleanPath.match(config.pattern);
     if (match) {
       if (config.type === 'watch') {
         return { page: 'watch', mediaType: match[1], id: match[2] };
       }
-      return { 
-        page: name, 
-        tab: config.tab, 
-        mediaType: match[1] || null, 
-        id: match[2] || null 
+      return {
+        page: name,
+        tab: config.tab,
+        mediaType: match[1] || null,
+        id: match[2] || null
       };
     }
   }
-  return { page: 'home', tab: 'home' }; // Default
+  return { page: 'home', tab: 'home' };
 }
 
 function navigateTo(path, push = true) {
-  const fullPath = basePath + path;
+  const hashPath = '#' + path;
   if (push) {
-    history.pushState({ path: fullPath }, '', fullPath);
+    window.location.hash = hashPath;
+  } else {
+    window.location.replace(hashPath);
   }
-  handleRoute(fullPath);
 }
 
 function handleRoute(path) {
-  const cleanPath = path.replace(basePath, '') || '/home';
-  const route = parseRoute(cleanPath);
+  const route = parseRoute(path || window.location.href);
   
   // Handle watch route
   if (route.page === 'watch') {
@@ -100,7 +105,6 @@ function handleRoute(path) {
     } else if (route.tab === 'watchlist') {
       displayWatchlist();
     } else if (route.tab === 'search') {
-      // Focus search input if on search page
       setTimeout(() => searchInput?.focus(), 100);
     }
   }
@@ -114,21 +118,14 @@ function handleRoute(path) {
   }
 }
 
-// Handle browser back/forward
-window.addEventListener('popstate', (e) => {
-  const path = e.state?.path || window.location.pathname;
-  handleRoute(path);
+// Handle hash changes
+window.addEventListener('hashchange', () => {
+  handleRoute(window.location.href);
 });
 
 // Handle initial load
 document.addEventListener('DOMContentLoaded', () => {
-  const path = window.location.pathname;
-  if (path !== '/' && path !== '/index.html') {
-    handleRoute(path);
-  } else {
-    // Default to /home
-    navigateTo('/home', false);
-  }
+  handleRoute(window.location.href);
 });
 
 // ========== EXTERNAL STREAMING SERVICES CONFIG =========
