@@ -1,6 +1,8 @@
 const apiKey = "7ef03bd0c305f128db814368cb78a12c";
 const searchInput = document.getElementById("search");
 const resultsDiv = document.getElementById("results");
+const movieModal = document.getElementById("movieModal");
+const closeBtn = document.querySelector(".close-btn");
 let currentPage = 1;
 let currentQuery = "";
 let currentFilter = "all";
@@ -724,7 +726,11 @@ function displayContinueWatching(filter = 'all', containerId = 'continueWatching
       ${episodeBadge}
       <div class="movie-title">${title} (${type})${episodeInfo}</div>
     `;
-    div.onclick = () => showMovieDetails(item, true);
+    div.onclick = () => {
+      const pathParts = window.location.pathname.split('/').filter(Boolean);
+      const sourcePage = pathParts[0] || 'home';
+      showMovieDetails(item, true, null, sourcePage);
+    };
     container.appendChild(div);
   });
 }
@@ -750,7 +756,9 @@ function displayWatchlist() {
     `;
     
     div.onclick = () => {
-      showMovieDetails(item, false);
+      const pathParts = window.location.pathname.split('/').filter(Boolean);
+      const sourcePage = pathParts[0] || 'home';
+      showMovieDetails(item, false, null, sourcePage);
     };
     
     container.appendChild(div);
@@ -888,7 +896,11 @@ function displayKeywordResults(items, clear = true) {
       // but keeping it consistent is good.
     };
     
-    div.onclick = () => showMovieDetails(item, false);
+    div.onclick = () => {
+      const pathParts = window.location.pathname.split('/').filter(Boolean);
+      const sourcePage = pathParts[0] || 'home';
+      showMovieDetails(item, false, null, sourcePage);
+    };
     resultsDiv.appendChild(div);
   });
 }
@@ -1076,10 +1088,12 @@ function displayPersonResults(items, append = false) {
       const roleStr = roles.size > 0 ? Array.from(roles).join(', ') : 'Unknown';
   
       // ✅ Pass role data to the modal
+      const pathParts = window.location.pathname.split('/').filter(Boolean);
+      const sourcePage = pathParts[0] || 'home';
       showMovieDetails(item, false, { 
         roles: roleStr, 
         personName: item._personName || 'This person' 
-      });
+      }, sourcePage);
     };
     resultsDiv.appendChild(div);
   });
@@ -1262,7 +1276,9 @@ function displayResults(items, append = false) {
     };
 
     div.onclick = () => {
-      showMovieDetails(item, false);
+      const pathParts = window.location.pathname.split('/').filter(Boolean);
+      const sourcePage = pathParts[0] || 'home';
+      showMovieDetails(item, false, null, sourcePage);
     };
 
     resultsDiv.appendChild(div);
@@ -1353,9 +1369,22 @@ function renderExternalButtons(tmdbId, modalBody) {
   }
 }
 // ========== MODAL & VIDEO FUNCTIONS ==========
-async function showMovieDetails(item, fromContinueWatching = false, personRoleData = null) {
+async function showMovieDetails(item, fromContinueWatching = false, personRoleData = null, sourcePage = null) {
   const modal = document.getElementById("movieModal");
   const modalBody = document.getElementById("modalBody");
+
+  if (closeBtn && movieModal) {
+    closeBtn.onclick = () => {
+      movieModal.style.display = "none";
+      // Go back to the base page without the modal
+      const currentPath = window.location.pathname;
+      const parts = currentPath.split('/').filter(Boolean);
+      // If path is like /search/movie/123, go back to /search
+      const basePath = parts.length >= 1 ? `/${parts[0]}` : '/home';
+      navigateTo(basePath);
+    };
+  }
+  
   if (!modal || !modalBody) return;
   modalBody.innerHTML = "<p>Loading...</p>";
   modal.style.display = "block";
@@ -1374,16 +1403,6 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
                     item.media_type === "tv" && data.episode_run_time?.[0] ? data.episode_run_time[0] + " min/ep" : "N/A";
     const genres = data.genres?.map(g => g.name).join(", ") || "N/A";
     
-    // In close button handlers
-    if (closeBtn && movieModal) {
-      closeBtn.onclick = () => {
-        movieModal.style.display = "none";
-        // Go back to the page without the modal
-        const currentPath = window.location.pathname;
-        const basePath = currentPath.split('/').slice(0, 2).join('/');
-        navigateTo(basePath || '/home');
-      };
-    }
 
     // ✅ Build Role HTML if coming from People search
     let roleHTML = '';
@@ -1526,9 +1545,15 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
     }
 
     modalBody.innerHTML = modalHTML;
-
+    
     // ✅ Render external streaming buttons
     renderExternalButtons(item.id, modalBody);
+
+    // ✅ Update URL with modal state if source page is known
+    if (sourcePage) {
+      const path = `/${sourcePage}/${item.media_type}/${item.id}`;
+      navigateTo(path);
+    }
 
     // ✅ ASYNC TRAILER INJECTION
     (async () => {
@@ -2356,7 +2381,11 @@ function displayNewAdditions(items, clear = true, container, hideMovieBadge = fa
       ${badgeHTML}
       <div class="movie-title">${title} (${type}) ${year}</div>
     `;
-    div.onclick = () => showMovieDetails(item, false);
+    div.onclick = () => {
+      const pathParts = window.location.pathname.split('/').filter(Boolean);
+      const sourcePage = pathParts[0] || 'home';
+      showMovieDetails(item, true, null, sourcePage);
+    };
     container.appendChild(div);
   });
 }
@@ -2392,8 +2421,6 @@ document.addEventListener("DOMContentLoaded", () => {
   loadTvExternalLinks();
 
   // Modal Close Logic
-  const movieModal = document.getElementById("movieModal");
-  const closeBtn = document.querySelector(".close-btn");
   const videoModal = document.getElementById("videoModal");
   const videoCloseBtn = document.querySelector(".video-close");
   if (closeBtn && movieModal) closeBtn.onclick = () => movieModal.style.display = "none";
