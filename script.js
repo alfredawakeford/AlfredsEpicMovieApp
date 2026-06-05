@@ -40,22 +40,26 @@ const tabState = {
 
 // ========== CLIENT-SIDE ROUTING (HASH-BASED) ==========
 const routes = {
-  home: { pattern: /^#\/home(?:\/(movie|tv)\/(\d+))?$/, tab: 'home' },
-  movies: { pattern: /^#\/movies(?:\/(movie|tv)\/(\d+))?$/, tab: 'movies' },
-  tv: { pattern: /^#\/tv(?:\/(movie|tv)\/(\d+))?$/, tab: 'tv' },
-  search: { pattern: /^#\/search(?:\/(movie|tv)\/(\d+))?$/, tab: 'search' },
-  watchlist: { pattern: /^#\/watchlist(?:\/(movie|tv)\/(\d+))?$/, tab: 'watchlist' },
-  watch: { pattern: /^#\/(movie|tv)\/(\d+)\/watch$/, type: 'watch' }
+  home: { pattern: /^\/home(?:\/(movie|tv)\/(\d+))?$/, tab: 'home' },
+  movies: { pattern: /^\/movies(?:\/(movie|tv)\/(\d+))?$/, tab: 'movies' },
+  tv: { pattern: /^\/tv(?:\/(movie|tv)\/(\d+))?$/, tab: 'tv' },
+  search: { pattern: /^\/search(?:\/(movie|tv)\/(\d+))?$/, tab: 'search' },
+  watchlist: { pattern: /^\/watchlist(?:\/(movie|tv)\/(\d+))?$/, tab: 'watchlist' },
+  watch: { pattern: /^\/(movie|tv)\/(\d+)(?:\/(\d+)-(\d+))?\/watch$/, type: 'watch' }
 };
 
-function parseRoute(hash) {
-  const cleanHash = hash.startsWith('#') ? hash : '#' + hash;
-  
+function parseRoute(path) {
   for (const [name, config] of Object.entries(routes)) {
-    const match = cleanHash.match(config.pattern);
+    const match = path.match(config.pattern);
     if (match) {
       if (config.type === 'watch') {
-        return { page: 'watch', mediaType: match[1], id: match[2] };
+        return {
+          page: 'watch',
+          mediaType: match[1],
+          id: match[2],
+          season: match[3] ? parseInt(match[3]) : null,
+          episode: match[4] ? parseInt(match[4]) : null
+        };
       }
       return {
         page: name,
@@ -78,14 +82,16 @@ function navigateTo(path, push = true) {
 }
 
 function handleRoute(hash) {
-  const route = parseRoute(hash || window.location.hash || '#/home');
-  
+  // ✅ Strip the '#' so parseRoute can match correctly
+  const cleanPath = (hash || window.location.hash || '#/home').replace('#', '');
+  const route = parseRoute(cleanPath);
+
   // Handle watch route
   if (route.page === 'watch') {
-    openVideoPlayerFromRoute(route.mediaType, route.id);
+    openVideoPlayerFromRoute(route.mediaType, route.id, route.season, route.episode);
     return;
   }
-  
+
   // Switch tab
   const tabBtn = document.querySelector(`.tab-btn[data-tab="${route.tab}"]`);
   if (tabBtn) {
@@ -122,7 +128,6 @@ window.addEventListener('hashchange', () => {
 
 // Handle initial load
 document.addEventListener('DOMContentLoaded', () => {
-  // Always start with hash routing
   if (!window.location.hash) {
     window.location.replace('#/home');
   } else {
@@ -1935,8 +1940,9 @@ function updateModalToUnreleasedState(id, title, nextSeason, nextEpisode) {
 async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath, season = null, episode = null) {
   const modal = document.getElementById("videoModal");
   const titleEl = document.getElementById("videoTitle");
-  // ✅ Add /watch to URL (hash-based)
-  const watchHash = `#/${mediaType}/${id}/watch`;
+  const watchHash = season !== null && episode !== null && mediaType === 'tv'
+    ? `#/${mediaType}/${id}/${season}-${episode}/watch`
+    : `#/${mediaType}/${id}/watch`;
   if (window.location.hash !== watchHash) {
     history.replaceState({ hash: watchHash }, '', watchHash);
   }
@@ -1979,27 +1985,34 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
   setupVideoControls(id, mediaType, season, episode, itemTitle);
 }
 
-async function openVideoPlayerFromRoute(mediaType, id) {
+async function openVideoPlayerFromRoute(mediaType, id, season = null, episode = null) {
   // Fetch item details and open player
   try {
     const endpoint = mediaType === 'movie' ? 'movie' : 'tv';
     const res = await fetch(`https://api.themoviedb.org/3/${endpoint}/${id}?api_key=${apiKey}`);
     const data = await res.json();
-    
     const item = {
       id: id,
       media_type: mediaType,
       title: data.title || data.name,
       poster_path: data.poster_path
     };
-    
+
+    // ✅ Use season/episode from route if available
+    let embedUrl = `https://vidsrc-embed.su/embed/${mediaType}/${id}`;
+    if (season !== null && episode !== null && mediaType === 'tv') {
+      embedUrl = `https://vidsrc-embed.su/embed/tv/${id}/${season}-${episode}`;
+    }
+
     openVideoPlayer(
-      `https://vidsrc-embed.su/embed/${mediaType}/${id}`,
+      embedUrl,
       item.title,
       item.id,
       mediaType,
       item.title,
-      item.poster_path
+      item.poster_path,
+      season,
+      episode
     );
   } catch (e) {
     console.error('Failed to load from route:', e);
@@ -2137,6 +2150,11 @@ async function navigateEpisode(direction) {
   const epTag = s === 0 ? `Extra ${e}` : `S${s}E${e}`;
   titleEl.textContent = `${currentVideoState.itemTitle} - ${epTag}`;
   
+  const newWatchHash = `#/tv/${id}/${s}-${e}/watch`;
+  if (window.location.hash !== newWatchHash) {
+    history.replaceState({ hash: newWatchHash }, '', newWatchHash);
+  }
+
   try {
     const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${s}?api_key=${apiKey}`);
     const sd = await res.json();
@@ -2235,14 +2253,13 @@ function closeVideoModal() {
   const modal = document.getElementById("videoModal");
   const container = document.querySelector(".video-container");
   const videoEl = document.getElementById("videoPlayer");
+  
   // 💾 Save timestamp ONLY if still in Continue Watching
   if (videoEl && currentVideoState.id) {
     const currentTime = videoEl.currentTime;
     const watched = getWatchedData();
     const key = `${currentVideoState.mediaType}_${currentVideoState.id}`;
     const isInWatched = watched[key] !== undefined;
-    
-    // Only save if still in Continue Watching and watched more than 10 seconds
     if (isInWatched && currentTime > 10) {
       saveVideoTimestamp(
         currentVideoState.id, 
@@ -2253,30 +2270,47 @@ function closeVideoModal() {
       );
     }
   }
-
+  
   if (modal) modal.style.display = "none";
   if (container) container.innerHTML = '';
-
+  
   const debugEl = document.getElementById('video-timeline-debug');
   if (debugEl) {
     debugEl.textContent = '';
     debugEl.style.display = 'none';
     debugEl.style.color = '#aaa';
   }
-
+  
   document.body.style.overflow = "";
   const controlsWrapper = document.getElementById("videoControlsWrapper");
   if (controlsWrapper) controlsWrapper.remove();
-
-  currentVideoState = { 
-    id: null, mediaType: null, season: null, episode: null, 
-    itemTitle: null, totalEpisodesInSeason: 0, totalSeasons: 0 
+  
+  // ✅ Update URL: go back to info modal URL using HASH routing
+  if (currentVideoState.id && currentVideoState.mediaType) {
+    const { id, mediaType } = currentVideoState;
+    // Get the source page from current hash (e.g., "home", "search", etc.)
+    const currentHash = window.location.hash;
+    const parts = currentHash.replace('#', '').split('/').filter(Boolean);
+    const sourcePage = parts[0] || 'home';
+  
+    // Navigate to info modal URL with hash: #/home/movie/121
+    const infoModalHash = `#/${sourcePage}/${mediaType}/${id}`;
+    if (window.location.hash !== infoModalHash) {
+      history.replaceState({ hash: infoModalHash }, '', infoModalHash);
+    }
+  }
+  
+  // Reset state
+  currentVideoState = {
+    id: null, mediaType: null, season: null, episode: null,
+    itemTitle: null, totalEpisodesInSeason: 0, totalSeasons: 0
   };
-
+  
   if (document.getElementById("home-tab")?.classList.contains("active")) {
     displayContinueWatching();
   }
 }
+
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     closeVideoModal();
@@ -2391,6 +2425,16 @@ function displayNewAdditions(items, clear = true, container, hideMovieBadge = fa
   });
 }
 
+// Helper function to extract tab path from hash
+function getTabPathFromHash(hash) {
+  const parts = hash.replace('#', '').split('/').filter(Boolean);
+  // Find the tab name (home/movies/tv/search/watchlist)
+  const tabName = parts.find(p => ['home', 'movies', 'tv', 'search', 'watchlist'].includes(p)) || 'home';
+  // Get repo name if present (first part on GitHub Pages)
+  const repoPart = parts[0] && !['home', 'movies', 'tv', 'search', 'watchlist'].includes(parts[0]) ? parts[0] : null;
+  return repoPart ? `#/${repoPart}/${tabName}` : `#/${tabName}`;
+}
+
 // 🔄 UNIFIED DOMContentLoaded & SCROLL SETUP
 document.addEventListener("DOMContentLoaded", () => {
   // Initialize all tabs
@@ -2425,15 +2469,43 @@ document.addEventListener("DOMContentLoaded", () => {
   const videoModal = document.getElementById("videoModal");
   const videoCloseBtn = document.querySelector(".video-close");
   if (videoCloseBtn && videoModal) videoCloseBtn.onclick = closeVideoModal;
-  if (movieModal) movieModal.onclick = e => { if (e.target === movieModal) movieModal.style.display = "none"; };
-  if (videoModal) videoModal.onclick = e => { if (e.target === videoModal) closeVideoModal(); };
+  if (movieModal) {
+    movieModal.onclick = e => {
+      if (e.target === movieModal) {
+        movieModal.style.display = "none";
+        // Go back to base tab URL using hash
+        const currentHash = window.location.hash;
+        const parts = currentHash.replace('#', '').split('/').filter(Boolean);
+        const cleanParts = parts.filter(p => !/^(movie|tv)$/.test(p) && !/^\d+$/.test(p));
+        const tabPath = cleanParts.length > 0 ? `#/${cleanParts[0]}` : '#/home';
+        window.location.hash = tabPath;
+      }
+    };
+  }
+  if (videoModal) {
+    videoModal.onclick = e => {
+      if (e.target === videoModal) {
+        // ✅ Update URL before closing using hash
+        if (currentVideoState.id && currentVideoState.mediaType) {
+          const { id, mediaType } = currentVideoState;
+          const currentHash = window.location.hash;
+          const parts = currentHash.replace('#', '').split('/').filter(Boolean);
+          const sourcePage = parts[0] || 'home';
+          const infoModalHash = `#/${sourcePage}/${mediaType}/${id}`;
+          if (window.location.hash !== infoModalHash) {
+            history.replaceState({ hash: infoModalHash }, '', infoModalHash);
+          }
+        }
+        closeVideoModal();
+      }
+    };
+  }
   if (closeBtn && movieModal) {
     closeBtn.onclick = () => {
       movieModal.style.display = "none";
-      // Go back to base tab URL (strip modal ID)
+      // Go back to base tab URL using hash
       const currentHash = window.location.hash;
       const parts = currentHash.replace('#', '').split('/').filter(Boolean);
-      // Filter out media_type and ID to get just the tab
       const cleanParts = parts.filter(p => !/^(movie|tv)$/.test(p) && !/^\d+$/.test(p));
       const tabPath = cleanParts.length > 0 ? `#/${cleanParts[0]}` : '#/home';
       window.location.hash = tabPath;
