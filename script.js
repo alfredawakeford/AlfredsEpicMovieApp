@@ -21,6 +21,10 @@ let currentPersonResults = [];
 let currentKeywordId = null;
 let keywordSearchTimeout = null;
 let isKeywordSearch = false;
+// 🌐 Detect GitHub Pages base path
+const basePath = window.location.hostname.includes('github.io') 
+  ? '/AlfredsEpicMovieApp' 
+  : '';
 
 // STORAGE KEYS
 const STORAGE_WATCHED = "movieBrowser_watched";
@@ -63,14 +67,16 @@ function parseRoute(path) {
 }
 
 function navigateTo(path, push = true) {
+  const fullPath = basePath + path;
   if (push) {
-    history.pushState({ path }, '', path);
+    history.pushState({ path: fullPath }, '', fullPath);
   }
-  handleRoute(path);
+  handleRoute(fullPath);
 }
 
 function handleRoute(path) {
-  const route = parseRoute(path);
+  const cleanPath = path.replace(basePath, '') || '/home';
+  const route = parseRoute(cleanPath);
   
   // Handle watch route
   if (route.page === 'watch') {
@@ -1373,17 +1379,6 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
   const modal = document.getElementById("movieModal");
   const modalBody = document.getElementById("modalBody");
 
-  if (closeBtn && movieModal) {
-    closeBtn.onclick = () => {
-      movieModal.style.display = "none";
-      // Go back to the base page without the modal
-      const currentPath = window.location.pathname;
-      const parts = currentPath.split('/').filter(Boolean);
-      // If path is like /search/movie/123, go back to /search
-      const basePath = parts.length >= 1 ? `/${parts[0]}` : '/home';
-      navigateTo(basePath);
-    };
-  }
   
   if (!modal || !modalBody) return;
   modalBody.innerHTML = "<p>Loading...</p>";
@@ -1551,8 +1546,9 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
 
     // ✅ Update URL with modal state if source page is known
     if (sourcePage) {
-      const path = `/${sourcePage}/${item.media_type}/${item.id}`;
-      navigateTo(path);
+      const modalPath = basePath + `/${sourcePage}/${item.media_type}/${item.id}`;
+      // Push state WITHOUT calling handleRoute (we're already in the modal!)
+      history.pushState({ path: modalPath }, '', modalPath);
     }
 
     // ✅ ASYNC TRAILER INJECTION
@@ -1940,6 +1936,9 @@ function updateModalToUnreleasedState(id, title, nextSeason, nextEpisode) {
 async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath, season = null, episode = null) {
   const modal = document.getElementById("videoModal");
   const titleEl = document.getElementById("videoTitle");
+  const watchPath = basePath + `/${mediaType}/${id}/watch`;
+  history.pushState({ path: watchPath }, '', watchPath);
+  
   if (!modal) return;
   
   const watchlistItem = { id, media_type: mediaType, title: itemTitle, poster_path: posterPath };
@@ -2427,6 +2426,18 @@ document.addEventListener("DOMContentLoaded", () => {
   if (videoCloseBtn && videoModal) videoCloseBtn.onclick = closeVideoModal;
   if (movieModal) movieModal.onclick = e => { if (e.target === movieModal) movieModal.style.display = "none"; };
   if (videoModal) videoModal.onclick = e => { if (e.target === videoModal) closeVideoModal(); };
+  if (closeBtn && movieModal) {
+    closeBtn.onclick = () => {
+      movieModal.style.display = "none";
+      // Go back to base tab URL (strip modal ID)
+      const currentPath = window.location.pathname;
+      const parts = currentPath.split('/').filter(Boolean);
+      // If path is /AlfredsEpicMovieApp/search/movie/123 → go to /AlfredsEpicMovieApp/search
+      const cleanParts = parts.filter(p => !/^(movie|tv)$/.test(p) && !/^\d+$/.test(p));
+      const tabPath = cleanParts.length > 0 ? `/${cleanParts[0]}` : '/home';
+      navigateTo(tabPath);
+    };
+  }
 });
 
 document.querySelectorAll('.search-mode-buttons .filter-btn').forEach(btn => {
