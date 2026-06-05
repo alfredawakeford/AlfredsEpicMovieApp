@@ -38,8 +38,7 @@ const tabState = {
   tv: { page: 1, loading: false }
 };
 
-// ========== CLIENT-SIDE ROUTING ==========
-// ========== CLIENT-SIDE ROUTING ==========
+// ========== CLIENT-SIDE ROUTING (HASH-BASED) ==========
 const routes = {
   home: { pattern: /^#\/home(?:\/(movie|tv)\/(\d+))?$/, tab: 'home' },
   movies: { pattern: /^#\/movies(?:\/(movie|tv)\/(\d+))?$/, tab: 'movies' },
@@ -49,13 +48,11 @@ const routes = {
   watch: { pattern: /^#\/(movie|tv)\/(\d+)\/watch$/, type: 'watch' }
 };
 
-function parseRoute(path) {
-  // Use hash if available, otherwise use pathname
-  const hash = path.includes('#') ? path.split('#')[1] || '/' : '/';
-  const cleanPath = hash.startsWith('/') ? hash : '/' + hash;
+function parseRoute(hash) {
+  const cleanHash = hash.startsWith('#') ? hash : '#' + hash;
   
   for (const [name, config] of Object.entries(routes)) {
-    const match = cleanPath.match(config.pattern);
+    const match = cleanHash.match(config.pattern);
     if (match) {
       if (config.type === 'watch') {
         return { page: 'watch', mediaType: match[1], id: match[2] };
@@ -80,8 +77,8 @@ function navigateTo(path, push = true) {
   }
 }
 
-function handleRoute(path) {
-  const route = parseRoute(path || window.location.href);
+function handleRoute(hash) {
+  const route = parseRoute(hash || window.location.hash || '#/home');
   
   // Handle watch route
   if (route.page === 'watch') {
@@ -118,14 +115,19 @@ function handleRoute(path) {
   }
 }
 
-// Handle hash changes
+// Handle hash changes (browser back/forward)
 window.addEventListener('hashchange', () => {
-  handleRoute(window.location.href);
+  handleRoute(window.location.hash);
 });
 
 // Handle initial load
 document.addEventListener('DOMContentLoaded', () => {
-  handleRoute(window.location.href);
+  // Always start with hash routing
+  if (!window.location.hash) {
+    window.location.replace('#/home');
+  } else {
+    handleRoute(window.location.hash);
+  }
 });
 
 // ========== EXTERNAL STREAMING SERVICES CONFIG =========
@@ -146,7 +148,6 @@ let externalLinksMap = new Map(); // Map<tmdbId, Map<serviceName, {link, logo, c
 let alternateLinks = new Map();
 let tvAlternateLinks = new Map();
 
-// ========== LOAD MOVIE ALTERNATE LINKS (NEW 4-COLUMN FORMAT) ==========
 // ========== LOAD MOVIE ALTERNATE LINKS (NEW 4-COLUMN FORMAT) ==========
 async function loadAlternateLinks() {
   try {
@@ -584,8 +585,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', (e) => {
     e.preventDefault();
     const tabName = btn.dataset.tab;
-    const path = `/${tabName}`;
-    navigateTo(path);
+    navigateTo(`/${tabName}`); // This now adds # automatically
   });
 });
 // ========== CLEAR MOVIES FROM WATCHING ==========
@@ -1543,9 +1543,11 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
 
     // ✅ Update URL with modal state if source page is known
     if (sourcePage) {
-      const modalPath = basePath + `/${sourcePage}/${item.media_type}/${item.id}`;
-      // Push state WITHOUT calling handleRoute (we're already in the modal!)
-      history.pushState({ path: modalPath }, '', modalPath);
+      const modalHash = `#/${sourcePage}/${item.media_type}/${item.id}`;
+      // Push hash WITHOUT calling handleRoute (we're already in the modal!)
+      if (window.location.hash !== modalHash) {
+        history.replaceState({ hash: modalHash }, '', modalHash);
+      }
     }
 
     // ✅ ASYNC TRAILER INJECTION
@@ -1933,8 +1935,11 @@ function updateModalToUnreleasedState(id, title, nextSeason, nextEpisode) {
 async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath, season = null, episode = null) {
   const modal = document.getElementById("videoModal");
   const titleEl = document.getElementById("videoTitle");
-  const watchPath = basePath + `/${mediaType}/${id}/watch`;
-  history.pushState({ path: watchPath }, '', watchPath);
+  // ✅ Add /watch to URL (hash-based)
+  const watchHash = `#/${mediaType}/${id}/watch`;
+  if (window.location.hash !== watchHash) {
+    history.replaceState({ hash: watchHash }, '', watchHash);
+  }
   
   if (!modal) return;
   
@@ -2419,7 +2424,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // Modal Close Logic
   const videoModal = document.getElementById("videoModal");
   const videoCloseBtn = document.querySelector(".video-close");
-  if (closeBtn && movieModal) closeBtn.onclick = () => movieModal.style.display = "none";
   if (videoCloseBtn && videoModal) videoCloseBtn.onclick = closeVideoModal;
   if (movieModal) movieModal.onclick = e => { if (e.target === movieModal) movieModal.style.display = "none"; };
   if (videoModal) videoModal.onclick = e => { if (e.target === videoModal) closeVideoModal(); };
@@ -2427,12 +2431,12 @@ document.addEventListener("DOMContentLoaded", () => {
     closeBtn.onclick = () => {
       movieModal.style.display = "none";
       // Go back to base tab URL (strip modal ID)
-      const currentPath = window.location.pathname;
-      const parts = currentPath.split('/').filter(Boolean);
-      // If path is /AlfredsEpicMovieApp/search/movie/123 → go to /AlfredsEpicMovieApp/search
+      const currentHash = window.location.hash;
+      const parts = currentHash.replace('#', '').split('/').filter(Boolean);
+      // Filter out media_type and ID to get just the tab
       const cleanParts = parts.filter(p => !/^(movie|tv)$/.test(p) && !/^\d+$/.test(p));
-      const tabPath = cleanParts.length > 0 ? `/${cleanParts[0]}` : '/home';
-      navigateTo(tabPath);
+      const tabPath = cleanParts.length > 0 ? `#/${cleanParts[0]}` : '#/home';
+      window.location.hash = tabPath;
     };
   }
 });
