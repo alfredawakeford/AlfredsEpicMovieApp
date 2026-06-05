@@ -31,6 +31,98 @@ const tabState = {
   movies: { page: 1, loading: false },
   tv: { page: 1, loading: false }
 };
+
+// ========== CLIENT-SIDE ROUTING ==========
+const routes = {
+  home: { pattern: /^\/home(?:\/(movie|tv)\/(\d+))?$/, tab: 'home' },
+  movies: { pattern: /^\/movies(?:\/(movie|tv)\/(\d+))?$/, tab: 'movies' },
+  tv: { pattern: /^\/tv(?:\/(movie|tv)\/(\d+))?$/, tab: 'tv' },
+  search: { pattern: /^\/search(?:\/(movie|tv)\/(\d+))?$/, tab: 'search' },
+  watchlist: { pattern: /^\/watchlist(?:\/(movie|tv)\/(\d+))?$/, tab: 'watchlist' },
+  watch: { pattern: /^\/(movie|tv)\/(\d+)\/watch$/, type: 'watch' }
+};
+
+function parseRoute(path) {
+  for (const [name, config] of Object.entries(routes)) {
+    const match = path.match(config.pattern);
+    if (match) {
+      if (config.type === 'watch') {
+        return { page: 'watch', mediaType: match[1], id: match[2] };
+      }
+      return { 
+        page: name, 
+        tab: config.tab, 
+        mediaType: match[1] || null, 
+        id: match[2] || null 
+      };
+    }
+  }
+  return { page: 'home', tab: 'home' }; // Default
+}
+
+function navigateTo(path, push = true) {
+  if (push) {
+    history.pushState({ path }, '', path);
+  }
+  handleRoute(path);
+}
+
+function handleRoute(path) {
+  const route = parseRoute(path);
+  
+  // Handle watch route
+  if (route.page === 'watch') {
+    openVideoPlayerFromRoute(route.mediaType, route.id);
+    return;
+  }
+  
+  // Switch tab
+  const tabBtn = document.querySelector(`.tab-btn[data-tab="${route.tab}"]`);
+  if (tabBtn) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    tabBtn.classList.add('active');
+    document.getElementById(`${route.tab}-tab`)?.classList.add('active');
+    
+    // Load tab content
+    if (['home', 'movies', 'tv'].includes(route.tab)) {
+      const filters = { home: 'all', movies: 'movie', tv: 'tv' };
+      displayContinueWatching(filters[route.tab], `continueWatching-${route.tab}`);
+      loadNewAdditions(route.tab, false);
+    } else if (route.tab === 'watchlist') {
+      displayWatchlist();
+    } else if (route.tab === 'search') {
+      // Focus search input if on search page
+      setTimeout(() => searchInput?.focus(), 100);
+    }
+  }
+  
+  // Open modal if ID present
+  if (route.id && route.mediaType) {
+    setTimeout(() => {
+      const item = { id: route.id, media_type: route.mediaType };
+      showMovieDetails(item, false, null, route.tab);
+    }, 300);
+  }
+}
+
+// Handle browser back/forward
+window.addEventListener('popstate', (e) => {
+  const path = e.state?.path || window.location.pathname;
+  handleRoute(path);
+});
+
+// Handle initial load
+document.addEventListener('DOMContentLoaded', () => {
+  const path = window.location.pathname;
+  if (path !== '/' && path !== '/index.html') {
+    handleRoute(path);
+  } else {
+    // Default to /home
+    navigateTo('/home', false);
+  }
+});
+
 // ========== EXTERNAL STREAMING SERVICES CONFIG =========
 const externalServices = [
   { name: "BBC iPlayer", logo: "https://upload.wikimedia.org/wikipedia/en/f/fd/BBC_iPlayer_logo_%282021%29.svg", color: "#000000" },
@@ -484,22 +576,11 @@ function setVideoSource(id, mediaType, season, episode, fallbackUrl, autoResume 
 }
 // ========== TAB NAVIGATION ==========
 document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    
-    btn.classList.add('active');
-    const tabId = `${btn.dataset.tab}-tab`;
-    document.getElementById(tabId)?.classList.add('active');
-    
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
     const tabName = btn.dataset.tab;
-    // Load content for browse tabs
-    if (['home', 'movies', 'tv'].includes(tabName)) {
-      const filters = { home: 'all', movies: 'movie', tv: 'tv' };
-      displayContinueWatching(filters[tabName], `continueWatching-${tabName}`);
-      loadNewAdditions(tabName, false);
-    }
-    if (tabName === 'watchlist') displayWatchlist();
+    const path = `/${tabName}`;
+    navigateTo(path);
   });
 });
 // ========== CLEAR MOVIES FROM WATCHING ==========
@@ -1293,6 +1374,17 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
                     item.media_type === "tv" && data.episode_run_time?.[0] ? data.episode_run_time[0] + " min/ep" : "N/A";
     const genres = data.genres?.map(g => g.name).join(", ") || "N/A";
     
+    // In close button handlers
+    if (closeBtn && movieModal) {
+      closeBtn.onclick = () => {
+        movieModal.style.display = "none";
+        // Go back to the page without the modal
+        const currentPath = window.location.pathname;
+        const basePath = currentPath.split('/').slice(0, 2).join('/');
+        navigateTo(basePath || '/home');
+      };
+    }
+
     // ✅ Build Role HTML if coming from People search
     let roleHTML = '';
     if (personRoleData) {
@@ -1860,6 +1952,35 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
 
   setupVideoControls(id, mediaType, season, episode, itemTitle);
 }
+
+async function openVideoPlayerFromRoute(mediaType, id) {
+  // Fetch item details and open player
+  try {
+    const endpoint = mediaType === 'movie' ? 'movie' : 'tv';
+    const res = await fetch(`https://api.themoviedb.org/3/${endpoint}/${id}?api_key=${apiKey}`);
+    const data = await res.json();
+    
+    const item = {
+      id: id,
+      media_type: mediaType,
+      title: data.title || data.name,
+      poster_path: data.poster_path
+    };
+    
+    openVideoPlayer(
+      `https://vidsrc-embed.su/embed/${mediaType}/${id}`,
+      item.title,
+      item.id,
+      mediaType,
+      item.title,
+      item.poster_path
+    );
+  } catch (e) {
+    console.error('Failed to load from route:', e);
+    navigateTo('/home');
+  }
+}
+
 async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
   // ✅ Remove old wrapper if it exists
   const oldWrapper = document.getElementById("videoControlsWrapper");
@@ -2318,11 +2439,6 @@ document.querySelectorAll('.search-filters .filter-btn').forEach(btn => {
     if (isPersonSearch) {
       displayPersonResults(currentPersonResults, false);
     } else if (isKeywordSearch) {
-      // Re-fetch page 1 for the new filter? Or just re-filter existing?
-      // Since we fetch Movies and TV separately in loadKeywordResults, 
-      // it's easier to just re-run the display function if we have the data.
-      // BUT, loadKeywordResults combines them. 
-      // To keep it simple: Reset to page 1 and reload.
       currentPage = 1;
       resultsDiv.innerHTML = '<p>Loading...</p>';
       loadKeywordResults(false);
