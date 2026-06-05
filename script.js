@@ -1549,9 +1549,8 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
     // ✅ Update URL with modal state if source page is known
     if (sourcePage) {
       const modalHash = `#/${sourcePage}/${item.media_type}/${item.id}`;
-      // Push hash WITHOUT calling handleRoute (we're already in the modal!)
       if (window.location.hash !== modalHash) {
-        history.replaceState({ hash: modalHash }, '', modalHash);
+        history.replaceState({}, '', modalHash); // ← No handleRoute call needed
       }
     }
 
@@ -2262,10 +2261,10 @@ function closeVideoModal() {
     const isInWatched = watched[key] !== undefined;
     if (isInWatched && currentTime > 10) {
       saveVideoTimestamp(
-        currentVideoState.id, 
-        currentVideoState.mediaType, 
-        currentVideoState.season, 
-        currentVideoState.episode, 
+        currentVideoState.id,
+        currentVideoState.mediaType,
+        currentVideoState.season,
+        currentVideoState.episode,
         currentTime
       );
     }
@@ -2285,16 +2284,18 @@ function closeVideoModal() {
   const controlsWrapper = document.getElementById("videoControlsWrapper");
   if (controlsWrapper) controlsWrapper.remove();
   
-  // ✅ Update URL: go back to info modal URL using HASH routing
+  // ✅ Update URL: go back to info modal URL WITH source page prefix
   if (currentVideoState.id && currentVideoState.mediaType) {
-    const { id, mediaType } = currentVideoState;
-    // Get the source page from current hash (e.g., "home", "search", etc.)
-    const currentHash = window.location.hash;
-    const parts = currentHash.replace('#', '').split('/').filter(Boolean);
-    const sourcePage = parts[0] || 'home';
-  
-    // Navigate to info modal URL with hash: #/home/movie/121
-    const infoModalHash = `#/${sourcePage}/${mediaType}/${id}`;
+    const { id, mediaType, season, episode } = currentVideoState;
+    
+    // Get the current active tab as the source page
+    const activeTabBtn = document.querySelector('.tab-btn.active');
+    const sourcePage = activeTabBtn?.dataset.tab || 'home';
+    
+    const infoModalHash = season !== null && episode !== null && mediaType === 'tv'
+      ? `#/${sourcePage}/${mediaType}/${id}/${season}-${episode}`
+      : `#/${sourcePage}/${mediaType}/${id}`;
+      
     if (window.location.hash !== infoModalHash) {
       history.replaceState({ hash: infoModalHash }, '', infoModalHash);
     }
@@ -2465,53 +2466,71 @@ document.addEventListener("DOMContentLoaded", () => {
   loadExternalLinks();
   loadTvExternalLinks();
 
-  // Modal Close Logic
+  const movieModal = document.getElementById("movieModal");
+  const closeBtn = document.querySelector(".close-btn");
   const videoModal = document.getElementById("videoModal");
   const videoCloseBtn = document.querySelector(".video-close");
-  if (videoCloseBtn && videoModal) videoCloseBtn.onclick = closeVideoModal;
+
+  // Helper: Extract tab from hash (e.g., "#/home/movie/123" → "#/home")
+  function getTabHash() {
+    const hash = window.location.hash || '#/home';
+    const parts = hash.replace('#', '').split('/').filter(Boolean);
+    const tab = parts.find(p => ['home','movies','tv','search','watchlist'].includes(p)) || 'home';
+    return `#/${tab}`;
+  }
+
+  // Close movie modal + update hash
+  function closeMovieModal() {
+    if (movieModal) movieModal.style.display = "none";
+    window.location.hash = getTabHash();
+  }
+
+  // Close video modal + update hash
+  function closeVideoModalOnly() {
+    if (videoModal) videoModal.style.display = "none";
+    // If coming from video player, go back to info modal hash first
+    if (currentVideoState?.id && currentVideoState?.mediaType) {
+      const { id, mediaType } = currentVideoState;
+      const hashParts = window.location.hash.replace('#','').split('/').filter(Boolean);
+      const sourcePage = hashParts.find(p => ['home','movies','tv','search','watchlist'].includes(p)) || 'home';
+      window.location.hash = `#/${sourcePage}/${mediaType}/${id}`;
+    } else {
+      window.location.hash = getTabHash();
+    }
+  }
+
+  // Movie modal close handlers
+  if (closeBtn && movieModal) {
+    closeBtn.onclick = closeMovieModal;
+  }
   if (movieModal) {
-    movieModal.onclick = e => {
-      if (e.target === movieModal) {
-        movieModal.style.display = "none";
-        // Go back to base tab URL using hash
-        const currentHash = window.location.hash;
-        const parts = currentHash.replace('#', '').split('/').filter(Boolean);
-        const cleanParts = parts.filter(p => !/^(movie|tv)$/.test(p) && !/^\d+$/.test(p));
-        const tabPath = cleanParts.length > 0 ? `#/${cleanParts[0]}` : '#/home';
-        window.location.hash = tabPath;
-      }
+    movieModal.onclick = (e) => {
+      if (e.target === movieModal) closeMovieModal();
     };
+  }
+
+  // Video modal close handlers  
+  if (videoCloseBtn && videoModal) {
+    videoCloseBtn.onclick = closeVideoModalOnly;
   }
   if (videoModal) {
-    videoModal.onclick = e => {
-      if (e.target === videoModal) {
-        // ✅ Update URL before closing using hash
-        if (currentVideoState.id && currentVideoState.mediaType) {
-          const { id, mediaType } = currentVideoState;
-          const currentHash = window.location.hash;
-          const parts = currentHash.replace('#', '').split('/').filter(Boolean);
-          const sourcePage = parts[0] || 'home';
-          const infoModalHash = `#/${sourcePage}/${mediaType}/${id}`;
-          if (window.location.hash !== infoModalHash) {
-            history.replaceState({ hash: infoModalHash }, '', infoModalHash);
-          }
-        }
-        closeVideoModal();
+    videoModal.onclick = (e) => {
+      if (e.target === videoModal) closeVideoModalOnly();
+    };
+  }
+
+  // Escape key closes both
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      if (videoModal?.style.display === "block") {
+        closeVideoModalOnly();
+      } else if (movieModal?.style.display === "block") {
+        closeMovieModal();
       }
-    };
-  }
-  if (closeBtn && movieModal) {
-    closeBtn.onclick = () => {
-      movieModal.style.display = "none";
-      // Go back to base tab URL using hash
-      const currentHash = window.location.hash;
-      const parts = currentHash.replace('#', '').split('/').filter(Boolean);
-      const cleanParts = parts.filter(p => !/^(movie|tv)$/.test(p) && !/^\d+$/.test(p));
-      const tabPath = cleanParts.length > 0 ? `#/${cleanParts[0]}` : '#/home';
-      window.location.hash = tabPath;
-    };
-  }
+    }
+  });
 });
+
 
 document.querySelectorAll('.search-mode-buttons .filter-btn').forEach(btn => {
   btn.addEventListener('click', () => {
