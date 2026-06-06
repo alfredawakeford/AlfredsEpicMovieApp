@@ -4,12 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Movie Browser</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <h1>Alfred's Epic Movie Browser!</h1>
   
-  <!-- TAB NAVIGATION -->
   <div class="tabs">
     <button class="tab-btn active" data-tab="home">Home</button>
     <button class="tab-btn" data-tab="movies">Movies</button>
@@ -18,7 +18,6 @@
     <button class="tab-btn" data-tab="watchlist">Watchlist</button>
   </div>
   
-  <!-- HOME TAB -->
   <div id="home-tab" class="tab-content active">
     <button id="clearMoviesFromWatching" class="action-btn danger">Clear Movies from Continue Watching</button>
     <button id="clearContinueWatching" class="action-btn danger">Clear Continue Watching</button>
@@ -44,8 +43,7 @@
     <h2>New Additions</h2>
     <div class="horizontal-scroll" id="newAdditions-tv"></div>
   </div>
-  
-  <!-- SEARCH TAB -->
+
   <div id="search-tab" class="tab-content">
     <div class="search-section">
       <div class="search-input-wrapper">
@@ -69,13 +67,11 @@
     <div id="results" class="grid"></div>
   </div>
   
-  <!-- WATCHLIST TAB -->
   <div id="watchlist-tab" class="tab-content">
     <h2>Your Watchlist‎</h2>
     <div id="watchlist" class="grid"></div>
   </div>
   
-  <!-- MOVIE DETAILS MODAL -->
   <div id="movieModal" class="modal">
     <div class="modal-content">
       <span class="close-btn">&times;</span>
@@ -83,7 +79,6 @@
     </div>
   </div>
   
-  <!-- VIDEO PLAYER MODAL -->
   <div id="videoModal" class="video-modal">
     <button class="video-back" onclick="closeVideoModal()">← Back</button>
     <div class="video-container">
