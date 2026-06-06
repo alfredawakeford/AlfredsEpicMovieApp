@@ -18,9 +18,9 @@ let loading = false;
 
 // New Additions State
 const tabState = {
-  home: { page: 1, loading: false },
-  movies: { page: 1, loading: false },
-  tv: { page: 1, loading: false }
+  home: { page: 1, loading: false, seenIds: new Set() },
+  movies: { page: 1, loading: false, seenIds: new Set() },
+  tv: { page: 1, loading: false, seenIds: new Set() }
 };
 
 // Video Playback State
@@ -1899,7 +1899,6 @@ async function loadNewAdditions(tabName = 'home', append = false) {
   const state = tabState[tabName];
   if (!state || state.loading) return;
   state.loading = true;
-  
   const containerId = `newAdditions-${tabName}`;
   const container = document.getElementById(containerId);
   if (!container) {
@@ -1907,23 +1906,26 @@ async function loadNewAdditions(tabName = 'home', append = false) {
     state.loading = false;
     return;
   }
-  
+
   const todayStr = new Date().toISOString().split('T')[0];
   const cacheKey = `newReleasesCache_${tabName}`;
   const cache = JSON.parse(localStorage.getItem(cacheKey) || "{}");
-  
+
   if (!append && cache.date === todayStr && cache.data) {
     console.log(`📦 Using cached new releases for ${tabName} (${todayStr})`);
+    state.seenIds.clear();
+    cache.data.forEach(item => state.seenIds.add(`${item.media_type}_${item.id}`));
     displayNewAdditions(cache.data, true, container, tabName === 'movies');
     state.loading = false;
     return;
   }
-  
+
   if (!append) {
+    state.seenIds.clear();
     container.innerHTML = "<p>Loading...</p>";
     state.page = 1;
   }
-  
+
   try {
     const [moviesRes, tvRes] = await Promise.all([
       fetch(`https://api.themoviedb.org/3/movie/now_playing?api_key=${apiKey}&page=${state.page}`),
@@ -1941,11 +1943,20 @@ async function loadNewAdditions(tabName = 'home', append = false) {
     const filter = filters[tabName] || 'all';
     if (filter !== 'all') combined = combined.filter(i => i.media_type === filter);
 
-    combined.sort((a, b) => new Date(b.release_date || b.first_air_date || 0) - new Date(a.release_date || a.first_air_date || 0));
+    const uniqueCombined = combined.filter(item => {
+      const key = `${item.media_type}_${item.id}`;
+      if (state.seenIds.has(key)) return false;
+      state.seenIds.add(key);
+      return true;
+    });
 
-    localStorage.setItem(cacheKey, JSON.stringify({ date: todayStr, data: combined }));
+    uniqueCombined.sort((a, b) => new Date(b.release_date || b.first_air_date || 0) - new Date(a.release_date || a.first_air_date || 0));
 
-    displayNewAdditions(combined, !append, container, tabName === 'movies');
+    if (state.page === 1) {
+      localStorage.setItem(cacheKey, JSON.stringify({ date: todayStr, data: uniqueCombined }));
+    }
+
+    displayNewAdditions(uniqueCombined, !append, container, tabName === 'movies');
     state.page++;
   } catch (e) {
     console.error("Error loading new additions:", e);
