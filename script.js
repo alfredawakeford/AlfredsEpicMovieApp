@@ -523,7 +523,7 @@ function addToWatched(item, season = null, episode = null) {
             watched[key] = existing;
             saveWatchedData(watched);
         }
-        return; // Stop here - do not overwrite main progress
+        return;
     }
 
     watched[key] = {
@@ -650,7 +650,7 @@ async function fetchKeywordSearch(query) {
   try {
     const res = await fetch(`https://api.themoviedb.org/3/search/keyword?api_key=${apiKey}&query=${encodeURIComponent(query)}`);
     const data = await res.json();
-    renderKeywordDropdown(data.results.slice(0, 8)); // Limit to 8
+    renderKeywordDropdown(data.results.slice(0, 8));
   } catch (e) {
     console.warn("Keyword search failed:", e);
   }
@@ -689,7 +689,7 @@ async function selectKeyword(keywordId, keywordName) {
   isKeywordSearch = true;
   currentKeywordId = keywordId;
   currentFilter = 'all';
-  seenKeywordItems.clear(); // ✅ Clear seen items on new search
+  seenKeywordItems.clear();
   
   document.querySelectorAll('.search-filters .filter-btn').forEach(b => b.classList.remove('active'));
   document.querySelector('.search-filters .filter-btn[data-filter="all"]').classList.add('active');
@@ -784,7 +784,7 @@ async function fetchPersonSearch(query) {
   try {
     const res = await fetch(`https://api.themoviedb.org/3/search/person?api_key=${apiKey}&query=${encodeURIComponent(query)}&include_adult=false`);
     const data = await res.json();
-    renderPersonDropdown(data.results.slice(0, 8)); // Limit to 8 for performance
+    renderPersonDropdown(data.results.slice(0, 8));
   } catch (e) {
     console.warn("Person search failed:", e);
   }
@@ -1001,7 +1001,7 @@ document.getElementById("clearData")?.addEventListener("click", () => {
   if (confirm("Are you sure? This will delete all watch history and watchlist!")) {
     localStorage.removeItem(STORAGE_WATCHED);
     localStorage.removeItem(STORAGE_WATCHLIST);
-    clearAllVideoProgressKeys(); // 👈 Purges all videoProgress_* keys
+    clearAllVideoProgressKeys();
     displayContinueWatching();
     displayWatchlist();
     alert("All data cleared!");
@@ -1010,7 +1010,7 @@ document.getElementById("clearData")?.addEventListener("click", () => {
 document.getElementById("clearContinueWatching")?.addEventListener("click", () => {
   if (confirm("Are you sure you want to clear all Continue Watching items?")) {
     localStorage.removeItem(STORAGE_WATCHED);
-    clearAllVideoProgressKeys(); // 👈 Purges all videoProgress_* keys
+    clearAllVideoProgressKeys();
     displayContinueWatching();
     alert("Continue Watching cleared!");
   }
@@ -1106,7 +1106,7 @@ async function loadResults() {
 function displayResults(items, append = false) {
   if (!append) {
     resultsDiv.innerHTML = "";
-    lastSearchResults = items; // Store for filtering
+    lastSearchResults = items;
   }
   
   const filteredItems = items.filter(item => {
@@ -1152,7 +1152,7 @@ window.addEventListener("scroll", () => {
   
   if (isKeywordSearch) {
     if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 200) {
-      loadKeywordResults(true); // true = append
+      loadKeywordResults(true);
     }
     return;
   }
@@ -1277,7 +1277,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
     if (item.media_type === "movie") {
       if (isInWatched) {
         actionButtonsHTML = `
-          <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
+          <button class="play-btn" onclick="openVideoPlayer('https://vsembed.ru/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
             ▶ Play Movie
           </button>
           <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
@@ -1286,7 +1286,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
         `;
       } else {
         actionButtonsHTML = `
-          <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
+          <button class="play-btn" onclick="openVideoPlayer('https://vsembed.ru/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
             ▶ Play Movie
           </button>
           <button class="action-btn" onclick="toggleWatchlistFromModal(${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
@@ -1309,7 +1309,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
           `;
         } else {
           actionButtonsHTML = `
-            <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${currentSeason}-${currentEpisode}', '${title} - S${currentSeason}E${currentEpisode}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${currentSeason}, ${currentEpisode})">
+            <button class="play-btn" onclick="openVideoPlayer('https://vsembed.ru/embed/tv/${item.id}/${currentSeason}-${currentEpisode}', '${title} - S${currentSeason}E${currentEpisode}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${currentSeason}, ${currentEpisode})">
               ▶ Play Season ${currentSeason} Episode ${currentEpisode}
             </button>
             <div class="tv-action-group">
@@ -1324,7 +1324,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
         }
       } else {
         actionButtonsHTML = `
-          <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/1-1', '${title} - S1E1', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', 1, 1)">
+          <button class="play-btn" onclick="openVideoPlayer('https://vsembed.ru/embed/tv/${item.id}/1-1', '${title} - S1E1', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', 1, 1)">
             ▶ Play Season 1 Episode 1
           </button>
           <button class="action-btn" onclick="toggleWatchlistFromModal(${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
@@ -1444,7 +1444,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
                   const playBtnHTML = isUnreleased 
                     ? `<span class="episode-play disabled" title="Not released yet" style="background:#555;cursor:not-allowed">⏳</span>`
                     : `<button class="episode-play" title="Play episode"
-                       onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${seasonNum}-${ep.episode_number}', '${videoTitle}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${seasonNum}, ${ep.episode_number})">
+                       onclick="openVideoPlayer('https://vsembed.ru/embed/tv/${item.id}/${seasonNum}-${ep.episode_number}', '${videoTitle}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${seasonNum}, ${ep.episode_number})">
                        ▶
                       </button>`;
                   
@@ -1640,7 +1640,7 @@ function updateModalUI(id, mediaType, title, nextSeason, nextEpisode) {
   const modalActions = document.querySelector('.modal-actions');
   if (modalActions) {
     modalActions.innerHTML = `
-      <button class="play-btn" id="tempPlayBtn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${id}/${nextSeason}-${nextEpisode}', '${title.replace(/'/g, "\\'")} - S${nextSeason}E${nextEpisode}', ${id}, '${mediaType}', '${title.replace(/'/g, "\\'")}', '${posterPath}', ${nextSeason}, ${nextEpisode})">
+      <button class="play-btn" id="tempPlayBtn" onclick="openVideoPlayer('https://vsembed.ru/embed/tv/${id}/${nextSeason}-${nextEpisode}', '${title.replace(/'/g, "\\'")} - S${nextSeason}E${nextEpisode}', ${id}, '${mediaType}', '${title.replace(/'/g, "\\'")}', '${posterPath}', ${nextSeason}, ${nextEpisode})">
         ▶ Play Season ${nextSeason} Episode ${nextEpisode}
       </button>
       <div class="tv-action-group">
@@ -1703,7 +1703,7 @@ function updateModalToUnwatchedState(id, title) {
   const modalActions = document.querySelector('.modal-actions');
   if (modalActions) {
     modalActions.innerHTML = `
-      <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${id}/1-1', '${title.replace(/'/g, "\\'")} - S1E1', ${id}, 'tv', '${title.replace(/'/g, "\\'")}', '${posterPath}', 1, 1)">
+      <button class="play-btn" onclick="openVideoPlayer('https://vsembed.ru/embed/tv/${id}/1-1', '${title.replace(/'/g, "\\'")} - S1E1', ${id}, 'tv', '${title.replace(/'/g, "\\'")}', '${posterPath}', 1, 1)">
         ▶ Play Season 1 Episode 1
       </button>
       <button class="action-btn" onclick="toggleWatchlistFromModal(${id}, 'tv', '${title.replace(/'/g, "\\'")}', '${posterPath}')">
@@ -1803,9 +1803,9 @@ async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
   wrapper.style.cssText = "width:90%; max-width:900px; margin:15px auto; display:flex; flex-direction:column; align-items:center;";
   
   const container = document.createElement("div");
-  container.id = "videoControls"; // ID kept here for updateButtonStates
+  container.id = "videoControls";
   container.className = "video-controls";
-  container.style.margin = "0"; // Remove margin since wrapper handles it
+  container.style.margin = "0";
   
   const prevBtn = document.createElement("button");
   prevBtn.className = "video-nav-btn";
@@ -1891,7 +1891,7 @@ async function navigateEpisode(direction) {
   container.innerHTML = '';
 
   const linkData = getTvAlternateLink(id, s, e);
-  const defaultSrc = `https://vidsrc-embed.su/embed/tv/${id}/${s}-${e}`;
+  const defaultSrc = `https://vsembed.ru/embed/tv/${id}/${s}-${e}`;
   
   if (linkData && linkData.videos.length > 0 && linkData.videos[0].toLowerCase().endsWith('.mp4')) {
     currentPlaybackLinks = linkData.videos;
@@ -2213,7 +2213,7 @@ document.querySelectorAll('.search-filters .filter-btn').forEach(btn => {
       displayPersonResults(currentPersonResults, false);
     } else if (isKeywordSearch) {
       currentPage = 1;
-      seenKeywordItems.clear(); // ✅ Clear and reload
+      seenKeywordItems.clear();
       resultsDiv.innerHTML = '<p>Loading...</p>';
       loadKeywordResults(false);
     } else if (lastSearchResults.length > 0) {
