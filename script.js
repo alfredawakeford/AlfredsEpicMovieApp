@@ -21,18 +21,17 @@ let isPersonSearch = false;
 let personSearchTimeout = null;
 let currentPersonResults = [];
 
-// STORAGE KEYS
 const STORAGE_WATCHED = "movieBrowser_watched";
 const STORAGE_WATCHLIST = "movieBrowser_watchlist";
 let currentPlaybackLinks = [];
 let currentLinkIndex = 0;
-// 🆕 Pagination & Loading State Per Tab
+
 const tabState = {
   home: { page: 1, loading: false },
   movies: { page: 1, loading: false },
   tv: { page: 1, loading: false }
 };
-// ========== EXTERNAL STREAMING SERVICES CONFIG =========
+
 const externalServices = [
   { name: "BBC iPlayer", logo: "https://upload.wikimedia.org/wikipedia/en/f/fd/BBC_iPlayer_logo_%282021%29.svg", color: "#000000" },
   { name: "Netflix", logo: "https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg", color: "#101010" },
@@ -44,14 +43,11 @@ const externalServices = [
   { name: "Discovery+", logo: "https://upload.wikimedia.org/wikipedia/commons/6/61/Discovery_Plus_logo.svg", color: "#001682" },
 ];
 
-let externalLinksMap = new Map(); // Map<tmdbId, Map<serviceName, {link, logo, color}>>
+let externalLinksMap = new Map(); 
 
-// ========== ALTERNATE VIDEO LINKS =========
 let alternateLinks = new Map();
 let tvAlternateLinks = new Map();
 
-// ========== LOAD MOVIE ALTERNATE LINKS (NEW 4-COLUMN FORMAT) ==========
-// ========== LOAD MOVIE ALTERNATE LINKS (NEW 4-COLUMN FORMAT) ==========
 async function loadAlternateLinks() {
   try {
     const response = await fetch('movielinks.csv');
@@ -60,13 +56,12 @@ async function loadAlternateLinks() {
     const lines = csvText.trim().split('\n');
     
     lines.forEach((line, index) => {
-      if (index === 0) return; // Skip header
+      if (index === 0) return; 
       const parts = line.split(',').map(s => s.trim());
-      if (parts.length < 3) return; // Need at least TMDB, ExternalLinkInfo, MP4Link
-      
+      if (parts.length < 3) return; 
+
       const [tmdbId, externalInfo, mp4Links, subtitleLink] = parts;
       
-      // ✅ Load MP4 video links (column 3) for fallback playback
       if (tmdbId && mp4Links) {
         alternateLinks.set(tmdbId, {
           videos: mp4Links.split('|').map(l => l.trim()).filter(Boolean),
@@ -74,10 +69,9 @@ async function loadAlternateLinks() {
         });
       }
       
-      // ✅ Load external streaming links (column 2) for "Also on" buttons
       if (tmdbId && externalInfo) {
         if (externalInfo === 'Nowhere') {
-          // Store special "Nowhere" flag
+          
           externalLinksMap.set(tmdbId, { nowhere: true });
         } else {
           const servicesMap = new Map();
@@ -113,7 +107,6 @@ async function loadAlternateLinks() {
   } catch (e) { console.warn('movielinks.csv load failed:', e); }
 }
 
-// ========== LOAD TV EXTERNAL LINKS ==========
 async function loadTvExternalLinks() {
   try {
     const response = await fetch('tvexternallinks.csv');
@@ -122,7 +115,7 @@ async function loadTvExternalLinks() {
     const lines = csvText.trim().split('\n');
     
     lines.forEach((line, index) => {
-      if (index === 0) return; // Skip header
+      if (index === 0) return; 
       const [tmdbId, externalInfo] = line.split(',').map(s => s.trim());
       if (!tmdbId || !externalInfo) return;
       
@@ -161,7 +154,6 @@ async function loadTvExternalLinks() {
   } catch (e) { console.warn('tvexternallinks.csv failed:', e); }
 }
 
-// ========== LOAD MOVIE EXTERNAL LINKS ==========
 async function loadExternalLinks() {
   try {
     const response = await fetch('movielinks.csv');
@@ -174,9 +166,9 @@ async function loadExternalLinks() {
     const lines = csvText.trim().split('\n');
     
     lines.forEach((line, index) => {
-      if (index === 0) return; // Skip header
+      if (index === 0) return; 
       
-      // New format: TMDB,ExternalLinkInfo,MP4Link,SubtitleLink
+      
       const parts = line.split(',').map(s => s.trim());
       if (parts.length < 2) return;
       
@@ -184,7 +176,7 @@ async function loadExternalLinks() {
       
       if (!tmdbId || !externalInfo) return;
       
-      // Parse ExternalLinkInfo: "Service1:link1|Service2:link2"
+      
       const services = externalInfo.split('|').map(s => s.trim()).filter(Boolean);
       
       services.forEach(serviceStr => {
@@ -196,7 +188,7 @@ async function loadExternalLinks() {
         
         if (!serviceName || !link) return;
         
-        // Find matching service config
+       
         const config = externalServices.find(s => s.name === serviceName);
         if (!config) {
           console.warn(`Unknown service "${serviceName}" for TMDB ${tmdbId}`);
@@ -240,38 +232,37 @@ async function loadTvAlternateLinks() {
   } catch (e) { console.warn('tvlinks.csv load failed:', e); }
 }
 
-// ========== TRAILERDB INTEGRATION ==========
-let trailerCache = new Map(); // Cache: tmdbId_mediaType → trailer embed URL
-// Fetch IMDB ID from TMDB API
+let trailerCache = new Map(); 
+
 async function getImdbId(tmdbId, mediaType) {
   try {
     const endpoint = mediaType === 'movie' ? 'movie' : 'tv';
     const res = await fetch(`https://api.themoviedb.org/3/${endpoint}/${tmdbId}?api_key=${apiKey}&language=en-US`);
     if (!res.ok) return null;
     const data = await res.json();
-    return data.imdb_id || null; // Returns "tt1234567" format
+    return data.imdb_id || null;
   } catch (e) {
     console.warn(`Failed to fetch IMDB ID for ${mediaType} ${tmdbId}:`, e);
     return null;
   }
 }
-// Fetch trailer URL from trailerdb.org
+
 async function getTrailerFromTrailerDb(imdbId) {
   try {
     const res = await fetch(`https://trailerdb.org/data/movie/${imdbId}.json`);
     if (!res.ok) return null;
     const data = await res.json();
-    // Filter for official English trailers, fallback to any English, then any official
+    
     const trailers = data.trailers || [];
     
-    // Priority 1: Official English trailer
+    
     let best = trailers.find(t => 
       t.type === 'trailer' && 
       t.language === 'en' && 
       t.is_official === true
     );
     
-    // Priority 2: Any English trailer
+    
     if (!best) {
       best = trailers.find(t => 
         t.type === 'trailer' && 
@@ -279,7 +270,7 @@ async function getTrailerFromTrailerDb(imdbId) {
       );
     }
     
-    // Priority 3: Any official trailer (any language)
+    
     if (!best) {
       best = trailers.find(t => 
         t.type === 'trailer' && 
@@ -287,7 +278,7 @@ async function getTrailerFromTrailerDb(imdbId) {
       );
     }
     
-    // Priority 4: Any trailer
+    
     if (!best) {
       best = trailers.find(t => t.type === 'trailer');
     }
@@ -301,7 +292,7 @@ async function getTrailerFromTrailerDb(imdbId) {
     return null;
   }
 }
-// Main function: Get trailer URL for any TMDB item
+
 async function fetchTrailerUrl(tmdbId, mediaType) {
   const cacheKey = `${tmdbId}_${mediaType}`;
   if (trailerCache.has(cacheKey)) return trailerCache.get(cacheKey);
@@ -324,27 +315,26 @@ function formatTime(seconds) {
     ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
     : `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
-// 🗑️ Clear video timestamp from localStorage
+
 function clearVideoTimestamp(id, mediaType, season, episode) {
   const key = `videoProgress_${mediaType}_${id}_${season || 0}_${episode || 0}`;
   localStorage.removeItem(key);
   console.log(`🗑️ Cleared timestamp: ${key}`);
 }
-// 🔍 Clear ALL timestamps for a specific item (useful for movies or when season/episode unknown)
+
 function clearAllTimestampsForItem(id, mediaType) {
   const watched = getWatchedData();
   const itemKey = `${mediaType}_${id}`;
   const item = watched[itemKey];
   if (item) {
-    // Clear the current episode's timestamp
+    
     if (item.currentSeason && item.currentEpisode) {
       clearVideoTimestamp(id, mediaType, item.currentSeason, item.currentEpisode);
     }
-    // Also clear S0E0 as fallback
+    
     clearVideoTimestamp(id, mediaType, 0, 0);
   }
 }
-// 🗑️ Clears ALL videoProgress_* keys from localStorage
 function clearAllVideoProgressKeys() {
   const keysToRemove = [];
   for (let i = 0; i < localStorage.length; i++) {
@@ -407,7 +397,6 @@ function attachDebugTimeline(videoEl, id, mediaType, season, episode, autoResume
 
   attachTimestampSaving(videoEl, id, mediaType, season, episode);
 }
-// ✅ Helper getters (return arrays)
 function getAlternateLink(id) {
   return alternateLinks.get(String(id)) || null;
 }
@@ -415,7 +404,6 @@ function getTvAlternateLink(id, season, episode) {
   const key = `${id}_${season}_${episode}`;
   return tvAlternateLinks.get(key) || null;
 }
-// ✅ Unified video renderer
 function renderVideoPlayer(src, id, mediaType, season, episode, subtitleUrl, autoResume = true) {
   const container = document.querySelector(".video-container");
   if (!container) return;
@@ -431,7 +419,6 @@ function renderVideoPlayer(src, id, mediaType, season, episode, subtitleUrl, aut
 
   attachDebugTimeline(videoEl, id, mediaType, season, episode, autoResume);
 
-  // 🎬 Inject subtitle track if available
   if (subtitleUrl) {
     const track = document.createElement('track');
     track.kind = 'subtitles';
@@ -441,13 +428,11 @@ function renderVideoPlayer(src, id, mediaType, season, episode, subtitleUrl, aut
     track.default = true;
     videoEl.appendChild(track);
     
-    // Ensure subtitles show by default when available
     videoEl.addEventListener('loadeddata', () => {
       if (videoEl.textTracks.length > 0) videoEl.textTracks[0].mode = 'showing';
     });
   }
 
-  // Show fallback button if more links exist
   if (currentPlaybackLinks.length > 1 && currentLinkIndex < currentPlaybackLinks.length - 1) {
     const btn = document.createElement('button');
     btn.className = 'fallback-link-btn';
@@ -459,7 +444,6 @@ function renderVideoPlayer(src, id, mediaType, season, episode, subtitleUrl, aut
     container.appendChild(btn);
   }
 }
-// ✅ Main source router
 function setVideoSource(id, mediaType, season, episode, fallbackUrl, autoResume = true) {
   const container = document.querySelector(".video-container");
   if (!container) return;
@@ -483,7 +467,6 @@ function setVideoSource(id, mediaType, season, episode, fallbackUrl, autoResume 
     container.appendChild(iframe);
   }
 }
-// ========== TAB NAVIGATION ==========
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -494,7 +477,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.getElementById(tabId)?.classList.add('active');
     
     const tabName = btn.dataset.tab;
-    // Load content for browse tabs
     if (['home', 'movies', 'tv'].includes(tabName)) {
       const filters = { home: 'all', movies: 'movie', tv: 'tv' };
       displayContinueWatching(filters[tabName], `continueWatching-${tabName}`);
@@ -503,14 +485,12 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (tabName === 'watchlist') displayWatchlist();
   });
 });
-// ========== CLEAR MOVIES FROM WATCHING ==========
 document.getElementById("clearMoviesFromWatching")?.addEventListener("click", () => {
   if (confirm("Are you sure you want to remove all MOVIES from Continue Watching? TV shows will remain.")) {
     const watched = getWatchedData();
     let removedCount = 0;
     for (const key in watched) {
       if (watched[key].media_type === "movie") {
-        // 👈 Clear timestamps BEFORE deleting from watched list
         clearAllTimestampsForItem(watched[key].id, watched[key].media_type);
         delete watched[key];
         removedCount++;
@@ -520,7 +500,6 @@ document.getElementById("clearMoviesFromWatching")?.addEventListener("click", ()
     displayContinueWatching();
   }
 });
-// ========== WATCH DATA MANAGEMENT ==========
 function getWatchedData() {
   return JSON.parse(localStorage.getItem(STORAGE_WATCHED) || "{}");
 }
@@ -538,9 +517,6 @@ function addToWatched(item, season = null, episode = null) {
     const key = `${item.media_type}_${item.id}`;
     const existing = watched[key];
 
-    // 🛡️ FIX: Do not update Continue Watching progress for Extras (Season 0)
-    // If season is 0, we only update the timestamp if the item is already in the list.
-    // We do NOT change the currentSeason/currentEpisode pointer.
     if (season === 0) {
         if (existing) {
             existing.lastWatched = Date.now();
@@ -550,7 +526,6 @@ function addToWatched(item, season = null, episode = null) {
         return; // Stop here - do not overwrite main progress
     }
 
-    // Normal logic for Seasons 1+
     watched[key] = {
         id: item.id,
         media_type: item.media_type,
@@ -564,8 +539,6 @@ function addToWatched(item, season = null, episode = null) {
     saveWatchedData(watched);
 }
 function updateTVEpisode(id, mediaType, currentSeason, currentEpisode) {
-    // 🛡️ FIX: Ignore updates for Extras (Season 0)
-    // Navigating within extras should not affect the main show progress in localStorage.
     if (currentSeason === 0) return;
 
     const watched = getWatchedData();
@@ -580,7 +553,6 @@ function updateTVEpisode(id, mediaType, currentSeason, currentEpisode) {
 function removeFromWatched(id, mediaType, season = null, episode = null) {
   const watched = getWatchedData();
   const key = `${mediaType}_${id}`;
-  // Clear timestamp(s)
   if (season !== null && episode !== null) {
     clearVideoTimestamp(id, mediaType, season, episode);
   } else {
@@ -609,8 +581,6 @@ function removeFromWatchlist(item) {
   const filtered = watchlist.filter(w => !(w.id === item.id && w.media_type === item.media_type));
   saveWatchlist(filtered);
 }
-// ========== CONTINUE WATCHING DISPLAY ==========
-// ✅ REFACTORED: Centralized Continue Watching renderer
 function displayContinueWatching(filter = 'all', containerId = 'continueWatching-home') {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -648,7 +618,6 @@ function displayContinueWatching(filter = 'all', containerId = 'continueWatching
     container.appendChild(div);
   });
 }
-// ========== WATCHLIST DISPLAY ==========
 function displayWatchlist() {
   const container = document.getElementById("watchlist");
   const watchlist = getWatchlist();
@@ -677,7 +646,6 @@ function displayWatchlist() {
   });
 }
 
-// ✅ Fetch Keywords from TMDB
 async function fetchKeywordSearch(query) {
   try {
     const res = await fetch(`https://api.themoviedb.org/3/search/keyword?api_key=${apiKey}&query=${encodeURIComponent(query)}`);
@@ -688,7 +656,6 @@ async function fetchKeywordSearch(query) {
   }
 }
 
-// ✅ Render Keyword Dropdown
 function renderKeywordDropdown(results) {
   const dropdown = document.getElementById('search-dropdown');
   dropdown.innerHTML = '';
@@ -714,7 +681,6 @@ function renderKeywordDropdown(results) {
   dropdown.style.display = 'block';
 }
 
-// ✅ Select a Keyword and Load Results
 async function selectKeyword(keywordId, keywordName) {
   document.getElementById('search-dropdown').style.display = 'none';
   searchInput.value = keywordName;
@@ -725,7 +691,6 @@ async function selectKeyword(keywordId, keywordName) {
   currentFilter = 'all';
   seenKeywordItems.clear(); // ✅ Clear seen items on new search
   
-  // Reset filter UI
   document.querySelectorAll('.search-filters .filter-btn').forEach(b => b.classList.remove('active'));
   document.querySelector('.search-filters .filter-btn[data-filter="all"]').classList.add('active');
   
@@ -735,7 +700,6 @@ async function selectKeyword(keywordId, keywordName) {
   await loadKeywordResults(false);
 }
 
-// ✅ Load Movies/TVs for a specific Keyword
 async function loadKeywordResults(append = false) {
   if (!currentKeywordId) return;
   loading = true;
@@ -756,7 +720,6 @@ async function loadKeywordResults(append = false) {
       const movies = movieData.results.map(m => ({ ...m, media_type: "movie" }));
       const tv = tvData.results.map(t => ({ ...t, media_type: "tv" }));
       
-      // ✅ Filter out duplicates BEFORE adding
       const combined = [...movies, ...tv];
       const uniqueNew = combined.filter(item => {
         const key = `${item.media_type}_${item.id}`;
@@ -768,7 +731,6 @@ async function loadKeywordResults(append = false) {
       newResults = [...newResults, ...uniqueNew];
     }
     
-    // Sort by popularity
     newResults.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
     
     displayKeywordResults(newResults, !append);
@@ -779,7 +741,6 @@ async function loadKeywordResults(append = false) {
   loading = false;
 }
 
-// ✅ Display Keyword Results
 function displayKeywordResults(items, clear = true) {
   if (clear) resultsDiv.innerHTML = "";
   
@@ -812,8 +773,6 @@ function displayKeywordResults(items, clear = true) {
       const inWatchlist = watchlist.some(w => w.id === item.id && w.media_type === item.media_type);
       if (inWatchlist) removeFromWatchlist(item);
       else addToWatchlist(item);
-      // Re-render isn't strictly needed for keyword search as we don't store state in the DOM list usually, 
-      // but keeping it consistent is good.
     };
     
     div.onclick = () => showMovieDetails(item, false);
@@ -846,7 +805,6 @@ function renderPersonDropdown(results) {
     const imgUrl = person.profile_path ? `https://image.tmdb.org/t/p/w185${person.profile_path}` : '';
     const name = person.name;
     
-    // Extract known for titles
     const knownForText = person.known_for?.slice(0, 3).map(m => m.title || m.name).join(', ') || '';
     
     div.innerHTML = `
@@ -873,7 +831,6 @@ async function selectPerson(personId, personName) {
   currentFilter = 'all';
   resultsDiv.innerHTML = '<p>Loading filmography...</p>';
   
-  // Reset filter UI
   document.querySelectorAll('.search-filters .filter-btn').forEach(b => b.classList.remove('active'));
   document.querySelector('.search-filters .filter-btn[data-filter="all"]').classList.add('active');
   
@@ -883,7 +840,6 @@ async function selectPerson(personId, personName) {
     
     const allWorks = new Map();
     
-    // Merge Cast
     data.cast?.forEach(item => {
       if (item.title || item.name) {
         const key = `${item.media_type}_${item.id}`;
@@ -891,7 +847,6 @@ async function selectPerson(personId, personName) {
       }
     });
     
-    // Merge Crew (combine if exists)
     data.crew?.forEach(item => {
       if (item.title || item.name) {
         const key = `${item.media_type}_${item.id}`;
@@ -907,7 +862,6 @@ async function selectPerson(personId, personName) {
     
     let worksArray = Array.from(allWorks.values());
     
-    // Sort Alphabetically
     worksArray.sort((a, b) => {
       const titleA = (a.title || a.name || '').toLowerCase();
       const titleB = (b.title || b.name || '').toLowerCase();
@@ -946,27 +900,22 @@ function displayPersonResults(items, append = false) {
     const type = item.media_type === "movie" ? "Movie" : "TV";
     const year = (item.release_date || item.first_air_date || "").split("-")[0];
     
-    // ✅ Role badge for People search - with Multiple detection
     let badgeHTML = '';
     if (currentSearchMode === 'people') {
       const roles = new Set();
       
-      // Collect all crew departments
       if (item.crew_department) {
         roles.add(item.crew_department);
       }
       
-      // Collect all crew jobs (if different from department)
       if (item.crew_job && item.crew_job !== item.crew_department) {
         roles.add(item.crew_job);
       }
       
-      // Add "Acting" if they're in cast
       if (item.credit_type === 'cast') {
         roles.add('Acting');
       }
       
-      // Determine badge text
       let roleText = '';
       if (roles.size === 0) {
         roleText = 'Unknown';
@@ -995,7 +944,6 @@ function displayPersonResults(items, append = false) {
     };
     
     div.onclick = () => {
-      // ✅ Collect all roles for this specific film/show
       const roles = new Set();
       if (item.crew_department) roles.add(item.crew_department);
       if (item.crew_job && item.crew_job !== item.crew_department) roles.add(item.crew_job);
@@ -1003,7 +951,6 @@ function displayPersonResults(items, append = false) {
   
       const roleStr = roles.size > 0 ? Array.from(roles).join(', ') : 'Unknown';
   
-      // ✅ Pass role data to the modal
       showMovieDetails(item, false, { 
         roles: roleStr, 
         personName: item._personName || 'This person' 
@@ -1012,7 +959,6 @@ function displayPersonResults(items, append = false) {
     resultsDiv.appendChild(div);
   });
 }
-// Close dropdown when clicking outside
 document.addEventListener('click', (e) => {
   const dropdown = document.getElementById('search-dropdown');
   const wrapper = document.querySelector('.search-input-wrapper');
@@ -1021,7 +967,6 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// ========== CSV EXPORT ==========
 document.getElementById("exportCsv")?.addEventListener("click", () => {
   const watched = getWatchedData();
   const items = Object.values(watched);
@@ -1077,7 +1022,6 @@ document.getElementById("clearWatchlist")?.addEventListener("click", () => {
     alert("Watchlist cleared!");
   }
 });
-// ========== SEARCH & RESULTS ==========
 function score(item, query) {
   const title = (item.title || item.name || "").toLowerCase();
   const q = query.toLowerCase();
@@ -1092,7 +1036,6 @@ searchInput.addEventListener("input", async () => {
   clearTimeout(personSearchTimeout);
   clearTimeout(keywordSearchTimeout);
   
-  // 1. TITLE MODE
   if (currentSearchMode === 'title') {
     document.getElementById('search-dropdown').style.display = 'none';
     isPersonSearch = false;
@@ -1106,7 +1049,6 @@ searchInput.addEventListener("input", async () => {
     return;
   }
   
-  // 2. GENRE (KEYWORD) MODE
   if (currentSearchMode === 'genre') {
     isPersonSearch = false;
     
@@ -1115,12 +1057,10 @@ searchInput.addEventListener("input", async () => {
       return;
     }
     
-    // Debounce keyword search
     keywordSearchTimeout = setTimeout(() => fetchKeywordSearch(query), 300);
     return;
   }
   
-  // 3. PEOPLE MODE
   if (query.length < 2) {
     document.getElementById('search-dropdown').style.display = 'none';
     return;
@@ -1131,35 +1071,44 @@ searchInput.addEventListener("input", async () => {
 async function loadResults() {
   if (loading || !currentQuery) return;
   loading = true;
+  
   try {
-    const [movieRes, tvRes] = await Promise.all([
-      fetch(`https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&query=${encodeURIComponent(currentQuery)}&page=${currentPage}`),
-      fetch(`https://api.themoviedb.org/3/search/tv?api_key=${apiKey}&query=${encodeURIComponent(currentQuery)}&page=${currentPage}`)
-    ]);
+    const pagesToLoad = (currentPage === 1) ? [1, 2] : [currentPage];
+    let allResults = [];
     
-    const movieData = await movieRes.json();
-    const tvData = await tvRes.json();
+    for (const page of pagesToLoad) {
+      const [movieRes, tvRes] = await Promise.all([
+        fetch(`https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&query=${encodeURIComponent(currentQuery)}&page=${page}`),
+        fetch(`https://api.themoviedb.org/3/search/tv?api_key=${apiKey}&query=${encodeURIComponent(currentQuery)}&page=${page}`)
+      ]);
+      
+      const movieData = await movieRes.json();
+      const tvData = await tvRes.json();
+      
+      const movies = movieData.results.map(m => ({ ...m, media_type: "movie" }));
+      const tv = tvData.results.map(t => ({ ...t, media_type: "tv" }));
+      
+      allResults = [...allResults, ...movies, ...tv];
+    }
     
-    const movies = movieData.results.map(m => ({ ...m, media_type: "movie" }));
-    const tv = tvData.results.map(t => ({ ...t, media_type: "tv" }));
+    allResults.sort((a, b) => score(b, currentQuery) - score(a, currentQuery));
     
-    let combined = [...movies, ...tv];
-    combined.sort((a, b) => score(b, currentQuery) - score(a, currentQuery));
+    const uniqueResults = Array.from(new Map(allResults.map(item => [`${item.media_type}_${item.id}`, item])).values());
     
-    displayResults(combined, currentPage === 1 ? false : true);
-    currentPage++;
+    displayResults(uniqueResults, currentPage === 1 ? false : true);
+    currentPage += pagesToLoad.length;
   } catch (error) {
     console.error("Error:", error);
   }
   loading = false;
 }
+
 function displayResults(items, append = false) {
   if (!append) {
     resultsDiv.innerHTML = "";
     lastSearchResults = items; // Store for filtering
   }
   
-  // Filter based on currentFilter
   const filteredItems = items.filter(item => {
     if (currentFilter === "all") return true;
     return item.media_type === currentFilter;
@@ -1199,10 +1148,8 @@ function displayResults(items, append = false) {
 }
 
 window.addEventListener("scroll", () => {
-  // ✅ 1. Disable if viewing a person's filmography
   if (isPersonSearch) return; 
   
-  // ✅ 2. Handle Keyword Search Infinite Scroll
   if (isKeywordSearch) {
     if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 200) {
       loadKeywordResults(true); // true = append
@@ -1210,24 +1157,20 @@ window.addEventListener("scroll", () => {
     return;
   }
 
-  // ✅ 3. Standard Title Search Infinite Scroll
   if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 200) {
     loadResults();
   }
 });
 
-// ========== RENDER EXTERNAL SERVICE BUTTONS ==========
 function renderExternalButtons(tmdbId, modalBody) {
   const data = externalLinksMap.get(String(tmdbId));
   if (!data) return;
   
-  // ✅ Handle "Nowhere" case
   if (data.nowhere) {
     const section = document.createElement('div');
     section.className = 'external-services-section';
     section.innerHTML = '<h4 style="margin:10px 0; font-size:14px; color:#aaa;">This feature is on no other streaming services!</h4>';
     
-    // Insert after poster
     const poster = modalBody.querySelector('.modal-poster');
     if (poster) {
       poster.parentNode.insertBefore(section, poster.nextSibling);
@@ -1240,7 +1183,6 @@ function renderExternalButtons(tmdbId, modalBody) {
   const services = data.services;
   if (!services || services.size === 0) return;
   
-  // Check if already rendered
   if (modalBody.querySelector('.external-services-section')) return;
   
   const section = document.createElement('div');
@@ -1270,7 +1212,6 @@ function renderExternalButtons(tmdbId, modalBody) {
   
   section.appendChild(btnContainer);
   
-  // Insert after Play button
   const actionsDiv = modalBody.querySelector('.modal-actions');
   if (actionsDiv) {
     const playBtn = actionsDiv.querySelector('.play-btn');
@@ -1281,7 +1222,6 @@ function renderExternalButtons(tmdbId, modalBody) {
     }
   }
 }
-// ========== MODAL & VIDEO FUNCTIONS ==========
 async function showMovieDetails(item, fromContinueWatching = false, personRoleData = null) {
   const modal = document.getElementById("movieModal");
   const modalBody = document.getElementById("modalBody");
@@ -1303,7 +1243,6 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
                     item.media_type === "tv" && data.episode_run_time?.[0] ? data.episode_run_time[0] + " min/ep" : "N/A";
     const genres = data.genres?.map(g => g.name).join(", ") || "N/A";
     
-    // ✅ Build Role HTML if coming from People search
     let roleHTML = '';
     if (personRoleData) {
       const { roles, personName } = personRoleData;
@@ -1319,7 +1258,6 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
     const isInWatched = tracked !== undefined;
 
     
-    // ✅ Check if tracked TV episode is unreleased
     let isCurrentUnreleased = false;
     if (item.media_type === "tv" && currentSeason !== null && currentEpisode !== null) {
       try {
@@ -1359,7 +1297,6 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
     } else if (item.media_type === "tv") {
       if (isInWatched && currentSeason && currentEpisode) {
         if (isCurrentUnreleased) {
-          // ✅ Unreleased: disabled button, no "I watched" option
           actionButtonsHTML = `
             <button class="play-btn" disabled style="background:#555;cursor:not-allowed">
               ⏳ Episode has not released yet
@@ -1371,7 +1308,6 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
             </div>
           `;
         } else {
-          // ✅ Released: normal buttons
           actionButtonsHTML = `
             <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${currentSeason}-${currentEpisode}', '${title} - S${currentSeason}E${currentEpisode}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${currentSeason}, ${currentEpisode})">
               ▶ Play Season ${currentSeason} Episode ${currentEpisode}
@@ -1445,10 +1381,8 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
 
     modalBody.innerHTML = modalHTML;
 
-    // ✅ Render external streaming buttons
     renderExternalButtons(item.id, modalBody);
 
-    // ✅ ASYNC TRAILER INJECTION
     (async () => {
       try {
         const trailerBtnContainer = document.createElement('div');
@@ -1482,7 +1416,6 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
       }
     })();
     
-    // ✅ TV Episode list with unreleased logic
     if (item.media_type === "tv") {
       document.querySelectorAll('.season-toggle').forEach(btn => {
         btn.onclick = async (e) => {
@@ -1505,11 +1438,9 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
                   const isCurrentEpisode = currentSeason == seasonNum && currentEpisode == ep.episode_number;
                   const episodeNumberDisplay = seasonNum == 0 ? '' : `<span class="episode-number">E${ep.episode_number}</span>`;
                   
-                  // ✅ Check if unreleased
                   const airDate = ep.air_date ? new Date(ep.air_date) : null;
                   const isUnreleased = airDate && airDate > today;
                   
-                  // ✅ Build play button HTML
                   const playBtnHTML = isUnreleased 
                     ? `<span class="episode-play disabled" title="Not released yet" style="background:#555;cursor:not-allowed">⏳</span>`
                     : `<button class="episode-play" title="Play episode"
@@ -1517,7 +1448,6 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
                        ▶
                       </button>`;
                   
-                  // ✅ Add unreleased message between title and date
                   const unreleasedMsgHTML = isUnreleased 
                     ? `<span class="episode-unreleased" style="color:#ff6b6b;font-size:12px;font-weight:600;margin:0 8px">This episode has not released yet</span>` 
                     : '';
@@ -1562,13 +1492,11 @@ function openTrailer(url, title) {
   document.body.style.overflow = "hidden";
   container.innerHTML = '';
 
-  // Hide debug & episode controls for trailers
   const debugEl = document.getElementById('video-timeline-debug');
   if (debugEl) debugEl.style.display = 'none';
   const controls = document.getElementById('videoControls');
   if (controls) controls.remove();
 
-  // Direct .mp4 files use <video> tag, everything else uses iframe
   if (url.toLowerCase().endsWith('.mp4')) {
     const videoEl = document.createElement('video');
     videoEl.src = url;
@@ -1586,7 +1514,6 @@ function openTrailer(url, title) {
     iframe.src = url;
     iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;background:#000;';
     
-    // Fallback message if iframe fails to load
     let loadTimeout = setTimeout(() => {
       if (!iframe._loaded) {
         container.innerHTML = `
@@ -1637,7 +1564,6 @@ function removeFromContinueWatching(id, mediaType) {
   displayContinueWatching();
 }
 async function markEpisodeDone(id, mediaType, title, currentSeason, currentEpisode) {
-  // ✅ FIX: Extras do not affect Continue Watching or the modal play button
   if (currentSeason === 0) {
     alert("Extras progress is not tracked in Continue Watching.");
     return;
@@ -1667,7 +1593,6 @@ async function markEpisodeDone(id, mediaType, title, currentSeason, currentEpiso
       nextSeason = currentSeason + 1;
       nextEpisode = 1;
       
-      // ✅ Check if next season's first episode is unreleased
       try {
         const nextSeasonRes = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${nextSeason}?api_key=${apiKey}&language=en-US`);
         const nextSeasonData = await nextSeasonRes.json();
@@ -1683,7 +1608,6 @@ async function markEpisodeDone(id, mediaType, title, currentSeason, currentEpiso
       nextSeason = currentSeason;
       nextEpisode = currentEpisode + 1;
       
-      // ✅ Check if next episode is unreleased
       const nextEp = seasonData.episodes?.find(ep => ep.episode_number === nextEpisode);
       if (nextEp?.air_date) {
         const airDate = new Date(nextEp.air_date);
@@ -1702,7 +1626,6 @@ async function markEpisodeDone(id, mediaType, title, currentSeason, currentEpiso
   try {
     displayContinueWatching();
     
-    // ✅ Update UI based on whether next episode is released
     if (isNextUnreleased) {
       updateModalToUnreleasedState(id, title, nextSeason, nextEpisode);
     } else {
@@ -1807,7 +1730,6 @@ function updateModalToUnreleasedState(id, title, nextSeason, nextEpisode) {
     `;
   }
   
-  // Update episode list highlighting
   document.querySelectorAll('.episode-item.current').forEach(el => el.classList.remove('current'));
   const seasonContainer = document.getElementById(`episodes-s${nextSeason}`);
   if (seasonContainer) {
@@ -1841,7 +1763,6 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
 
   setVideoSource(id, mediaType, season, episode, url, true);
 
-  // ✅ Format initial title correctly for extras
   let displayTitle = title || "Now Playing";
   if (mediaType.trim() === "tv" && season === 0) {
     displayTitle = displayTitle.replace(/ - S0E(\d+)/, ` - Extra $1`);
@@ -1855,7 +1776,6 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
     displayWatchlist();
   }
 
-  // ✅ Fetch & format final title with episode name
   if (mediaType.trim() === "tv" && season !== null && episode !== null) {
     try {
       const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=en-US`);
@@ -1871,7 +1791,6 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
   setupVideoControls(id, mediaType, season, episode, itemTitle);
 }
 async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
-  // ✅ Remove old wrapper if it exists
   const oldWrapper = document.getElementById("videoControlsWrapper");
   if (oldWrapper) oldWrapper.remove();
 
@@ -1879,12 +1798,10 @@ async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
   
   currentVideoState = { id, mediaType: mediaType.trim(), season, episode, itemTitle, totalEpisodesInSeason: 0, totalSeasons: 0 };
   
-  // ✅ Create a Wrapper for vertical stacking
   const wrapper = document.createElement("div");
   wrapper.id = "videoControlsWrapper";
   wrapper.style.cssText = "width:90%; max-width:900px; margin:15px auto; display:flex; flex-direction:column; align-items:center;";
   
-  // ✅ Button Row Container
   const container = document.createElement("div");
   container.id = "videoControls"; // ID kept here for updateButtonStates
   container.className = "video-controls";
@@ -1898,7 +1815,6 @@ async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
   nextBtn.className = "video-nav-btn";
   nextBtn.onclick = () => navigateEpisode(1);
   
-  // ✅ Dynamic labels: Extras vs Episodes
   if (season === 0) {
     prevBtn.textContent = "Previous Extra";
     nextBtn.textContent = "Next Extra";
@@ -1910,12 +1826,10 @@ async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
   container.appendChild(prevBtn);
   container.appendChild(nextBtn);
   
-  // ✅ Status Message Container (Placed BELOW buttons in wrapper)
   const nextStatusEl = document.createElement("div");
   nextStatusEl.id = "nextEpisodeStatus";
   nextStatusEl.style.cssText = "color:#888; font-size:13px; margin-top:10px; min-height:20px;";
   
-  // ✅ Assemble
   wrapper.appendChild(container);
   wrapper.appendChild(nextStatusEl);
   
@@ -1937,13 +1851,11 @@ async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
   
   updateButtonStates();
 }
-// ✅ Updated episode navigation
 async function navigateEpisode(direction) {
   let s = currentVideoState.season;
   let e = currentVideoState.episode;
   const id = currentVideoState.id;
 
-  // ✅ Keep navigation strictly within extras (Season 0)
   if (s === 0) {
     if (direction === 1) {
       if (e >= currentVideoState.totalEpisodesInSeason) { alert("End of extras!"); return; }
@@ -1955,7 +1867,6 @@ async function navigateEpisode(direction) {
     currentVideoState.season = s;
     currentVideoState.episode = e;
   } else {
-    // Main series navigation
     if (direction === 1) {
       if (e >= currentVideoState.totalEpisodesInSeason) {
         if (s >= currentVideoState.totalSeasons) { alert("End of series!"); return; }
@@ -2007,7 +1918,6 @@ async function navigateEpisode(direction) {
     if (ed?.name) titleEl.textContent = `${currentVideoState.itemTitle} - ${epTag}: ${ed.name}`;
   } catch(err) {}
 
-  // ✅ Only update modal UI for main seasons (keeps S{}E{} button unchanged for extras)
   if (s > 0 && document.getElementById('movieModal')?.style.display === 'block') {
     try { updateModalUI(id, currentVideoState.mediaType, currentVideoState.itemTitle, s, e); } catch(e){}
   }
@@ -2021,31 +1931,25 @@ function updateButtonStates() {
   const statusEl = document.getElementById("nextEpisodeStatus");
   
   if (currentVideoState.season === 0) {
-    // Extras logic
     prev.disabled = currentVideoState.episode <= 1;
     next.disabled = currentVideoState.episode >= currentVideoState.totalEpisodesInSeason;
     if (statusEl) statusEl.textContent = "";
   } else {
-    // Main series logic
     const isLastEpisode = currentVideoState.season >= currentVideoState.totalSeasons && 
                           currentVideoState.episode >= currentVideoState.totalEpisodesInSeason;
     
-    // ✅ Check if next episode exists and is released
     let nextEpisodeReleased = true;
     let nextEpisodeExists = true;
     
     if (!isLastEpisode) {
-      // Calculate next episode
       let nextS = currentVideoState.season;
       let nextE = currentVideoState.episode + 1;
       
       if (nextE > currentVideoState.totalEpisodesInSeason) {
-        // Next episode is in next season
         nextS++;
         nextE = 1;
       }
       
-      // Find the episode in stored data
       if (nextS === currentVideoState.season) {
         const epData = currentVideoState.episodes?.find(ep => ep.episode_number === nextE);
         if (epData?.air_date) {
@@ -2057,7 +1961,6 @@ function updateButtonStates() {
           }
         }
       } else {
-        // Next season - fetch to check
         (async () => {
           try {
             const res = await fetch(`https://api.themoviedb.org/3/tv/${currentVideoState.id}/season/${nextS}?api_key=${apiKey}&language=en-US`);
@@ -2098,14 +2001,12 @@ function closeVideoModal() {
   const modal = document.getElementById("videoModal");
   const container = document.querySelector(".video-container");
   const videoEl = document.getElementById("videoPlayer");
-  // 💾 Save timestamp ONLY if still in Continue Watching
   if (videoEl && currentVideoState.id) {
     const currentTime = videoEl.currentTime;
     const watched = getWatchedData();
     const key = `${currentVideoState.mediaType}_${currentVideoState.id}`;
     const isInWatched = watched[key] !== undefined;
     
-    // Only save if still in Continue Watching and watched more than 10 seconds
     if (isInWatched && currentTime > 10) {
       saveVideoTimestamp(
         currentVideoState.id, 
@@ -2147,7 +2048,6 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// 📦 PER-TAB NEW ADDITIONS LOADER (With Midnight Cache)
 async function loadNewAdditions(tabName = 'home', append = false) {
   const state = tabState[tabName];
   if (!state || state.loading) return;
@@ -2161,7 +2061,6 @@ async function loadNewAdditions(tabName = 'home', append = false) {
     return;
   }
 
-  // 🌙 Midnight Cache Logic (Resets automatically at 00:00)
   const todayStr = new Date().toISOString().split('T')[0];
   const cacheKey = `newReleasesCache_${tabName}`;
   const cache = JSON.parse(localStorage.getItem(cacheKey) || "{}");
@@ -2191,18 +2090,14 @@ async function loadNewAdditions(tabName = 'home', append = false) {
       ...(tvData.results || []).map(t => ({...t, media_type: 'tv'}))
     ];
 
-    // 🎯 Filter by Tab
     const filters = { home: 'all', movies: 'movie', tv: 'tv' };
     const filter = filters[tabName] || 'all';
     if (filter !== 'all') combined = combined.filter(i => i.media_type === filter);
 
-    // 📅 Sort by Newest
     combined.sort((a, b) => new Date(b.release_date || b.first_air_date || 0) - new Date(a.release_date || a.first_air_date || 0));
 
-    // 💾 Cache for Midnight Reset
     localStorage.setItem(cacheKey, JSON.stringify({ date: todayStr, data: combined }));
 
-    // 🎨 Render (pass hideMovieBadge = true ONLY for movies tab)
     displayNewAdditions(combined, !append, container, tabName === 'movies');
     state.page++;
   } catch (e) {
@@ -2212,7 +2107,6 @@ async function loadNewAdditions(tabName = 'home', append = false) {
   state.loading = false;
 }
 
-// 🎨 SHARED RENDERER (Works for Home, Movies & TV tabs)
 function displayNewAdditions(items, clear = true, container, hideMovieBadge = false) {
   if (clear) container.innerHTML = '';
   const currentYear = new Date().getFullYear();
@@ -2227,14 +2121,12 @@ function displayNewAdditions(items, clear = true, container, hideMovieBadge = fa
     const year = releaseDate.split('-')[0];
 
     let badgeHTML = '';
-    // ✅ Badge Rule: Hide "New Movie" strap on Movies tab, keep everything else
     if (!(hideMovieBadge && item.media_type === 'movie')) {
       let badgeText = "New Movie";
       let badgeClass = "release-badge movie";
 
       if (item.media_type === "tv") {
         badgeText = (year === String(currentYear)) ? "New Show" : "New Episodes";
-        // Assign specific class based on the badge text
         badgeClass = badgeText === "New Show" ? "release-badge show" : "release-badge episodes";
       }
       badgeHTML = `<div class="${badgeClass}">${badgeText}</div>`;
@@ -2250,9 +2142,7 @@ function displayNewAdditions(items, clear = true, container, hideMovieBadge = fa
   });
 }
 
-// 🔄 UNIFIED DOMContentLoaded & SCROLL SETUP
 document.addEventListener("DOMContentLoaded", () => {
-  // Initialize all tabs
   ['home', 'movies', 'tv'].forEach(tab => {
     loadNewAdditions(tab, false);
     displayContinueWatching(
@@ -2261,7 +2151,6 @@ document.addEventListener("DOMContentLoaded", () => {
     );
   });
 
-  // Infinite Scroll for each tab
   ['home', 'movies', 'tv'].forEach(tab => {
     const container = document.getElementById(`newAdditions-${tab}`);
     if (!container) return;
@@ -2274,13 +2163,11 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Load CSVs & External Links
   loadAlternateLinks();
   loadTvAlternateLinks();
   loadExternalLinks();
   loadTvExternalLinks();
 
-  // Modal Close Logic
   const movieModal = document.getElementById("movieModal");
   const closeBtn = document.querySelector(".close-btn");
   const videoModal = document.getElementById("videoModal");
@@ -2297,7 +2184,6 @@ document.querySelectorAll('.search-mode-buttons .filter-btn').forEach(btn => {
     btn.classList.add('active');
     currentSearchMode = btn.dataset.type;
     
-    // Reset states on mode switch
     document.getElementById('search-dropdown').style.display = 'none';
     isPersonSearch = false;
     isKeywordSearch = false;
@@ -2307,7 +2193,6 @@ document.querySelectorAll('.search-mode-buttons .filter-btn').forEach(btn => {
     lastSearchResults = [];
     currentPersonResults = [];
     
-    // Update placeholder
     if (currentSearchMode === 'title') {
       searchInput.placeholder = "Search movies or TV shows...";
     } else if (currentSearchMode === 'genre') {
@@ -2318,7 +2203,6 @@ document.querySelectorAll('.search-mode-buttons .filter-btn').forEach(btn => {
   });
 });
 
-// ✅ Filter Type Buttons (All, Movies, TV Shows)
 document.querySelectorAll('.search-filters .filter-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.search-filters .filter-btn').forEach(b => b.classList.remove('active'));
@@ -2328,7 +2212,6 @@ document.querySelectorAll('.search-filters .filter-btn').forEach(btn => {
     if (isPersonSearch) {
       displayPersonResults(currentPersonResults, false);
     } else if (isKeywordSearch) {
-      // Re-fetch page 1 for the new filter
       currentPage = 1;
       seenKeywordItems.clear(); // ✅ Clear and reload
       resultsDiv.innerHTML = '<p>Loading...</p>';
