@@ -16,6 +16,7 @@ let currentSearchMode = 'title';
 let currentKeywordId = null;
 let keywordSearchTimeout = null;
 let isKeywordSearch = false;
+let seenKeywordItems = new Set();
 let isPersonSearch = false;
 let personSearchTimeout = null;
 let currentPersonResults = [];
@@ -722,6 +723,7 @@ async function selectKeyword(keywordId, keywordName) {
   isKeywordSearch = true;
   currentKeywordId = keywordId;
   currentFilter = 'all';
+  seenKeywordItems.clear(); // ✅ Clear seen items on new search
   
   // Reset filter UI
   document.querySelectorAll('.search-filters .filter-btn').forEach(b => b.classList.remove('active'));
@@ -739,9 +741,8 @@ async function loadKeywordResults(append = false) {
   loading = true;
   
   try {
-    // ✅ Load 2 pages initially to ensure enough content for scrollbar
     const pagesToLoad = append ? [currentPage] : [currentPage, currentPage + 1];
-    let allResults = [];
+    let newResults = [];
     
     for (const page of pagesToLoad) {
       const [movieRes, tvRes] = await Promise.all([
@@ -755,14 +756,22 @@ async function loadKeywordResults(append = false) {
       const movies = movieData.results.map(m => ({ ...m, media_type: "movie" }));
       const tv = tvData.results.map(t => ({ ...t, media_type: "tv" }));
       
-      allResults = [...allResults, ...movies, ...tv];
+      // ✅ Filter out duplicates BEFORE adding
+      const combined = [...movies, ...tv];
+      const uniqueNew = combined.filter(item => {
+        const key = `${item.media_type}_${item.id}`;
+        if (seenKeywordItems.has(key)) return false;
+        seenKeywordItems.add(key);
+        return true;
+      });
+      
+      newResults = [...newResults, ...uniqueNew];
     }
     
-    // Sort by popularity and remove duplicates
-    allResults.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
-    const uniqueResults = Array.from(new Map(allResults.map(item => [`${item.media_type}_${item.id}`, item])).values());
+    // Sort by popularity
+    newResults.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
     
-    displayKeywordResults(uniqueResults, !append);
+    displayKeywordResults(newResults, !append);
     currentPage += pagesToLoad.length;
   } catch (error) {
     console.error("Error loading keyword results:", error);
@@ -2319,12 +2328,9 @@ document.querySelectorAll('.search-filters .filter-btn').forEach(btn => {
     if (isPersonSearch) {
       displayPersonResults(currentPersonResults, false);
     } else if (isKeywordSearch) {
-      // Re-fetch page 1 for the new filter? Or just re-filter existing?
-      // Since we fetch Movies and TV separately in loadKeywordResults, 
-      // it's easier to just re-run the display function if we have the data.
-      // BUT, loadKeywordResults combines them. 
-      // To keep it simple: Reset to page 1 and reload.
+      // Re-fetch page 1 for the new filter
       currentPage = 1;
+      seenKeywordItems.clear(); // ✅ Clear and reload
       resultsDiv.innerHTML = '<p>Loading...</p>';
       loadKeywordResults(false);
     } else if (lastSearchResults.length > 0) {
