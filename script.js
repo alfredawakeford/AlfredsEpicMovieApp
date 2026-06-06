@@ -61,6 +61,7 @@ const externalServices = [
   { name: "Channel 4", logo: "https://upload.wikimedia.org/wikipedia/commons/4/46/All_4_%282019%29.svg", color: "#abff8a" },
   { name: "HBO MAX", logo: "https://upload.wikimedia.org/wikipedia/commons/7/7e/HBO_Max_May_2025_%28Horizontal%29.svg", color: "#ffffff" },
   { name: "Discovery+", logo: "https://upload.wikimedia.org/wikipedia/commons/6/61/Discovery_Plus_logo.svg", color: "#001682" },
+  { name: "ITVX", logo: "https://upload.wikimedia.org/wikipedia/en/1/12/ITVX_logo.svg", color: "#083644" },
 ];
 
 
