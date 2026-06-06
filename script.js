@@ -1,8 +1,6 @@
 const apiKey = "7ef03bd0c305f128db814368cb78a12c";
 const searchInput = document.getElementById("search");
 const resultsDiv = document.getElementById("results");
-const movieModal = document.getElementById("movieModal");
-const closeBtn = document.querySelector(".close-btn");
 let currentPage = 1;
 let currentQuery = "";
 let currentFilter = "all";
@@ -15,16 +13,12 @@ let currentVideoState = {
   itemTitle: null, totalEpisodesInSeason: 0, totalSeasons: 0
 };
 let currentSearchMode = 'title';
-let isPersonSearch = false;
-let personSearchTimeout = null;
-let currentPersonResults = [];
 let currentKeywordId = null;
 let keywordSearchTimeout = null;
 let isKeywordSearch = false;
-// 🌐 Detect GitHub Pages base path
-const basePath = window.location.hostname.includes('github.io') 
-  ? '/AlfredsEpicMovieApp' 
-  : '';
+let isPersonSearch = false;
+let personSearchTimeout = null;
+let currentPersonResults = [];
 
 // STORAGE KEYS
 const STORAGE_WATCHED = "movieBrowser_watched";
@@ -37,104 +31,6 @@ const tabState = {
   movies: { page: 1, loading: false },
   tv: { page: 1, loading: false }
 };
-
-// ========== CLIENT-SIDE ROUTING (HASH-BASED) ==========
-const routes = {
-  home: { pattern: /^\/home(?:\/(movie|tv)\/(\d+))?$/, tab: 'home' },
-  movies: { pattern: /^\/movies(?:\/(movie|tv)\/(\d+))?$/, tab: 'movies' },
-  tv: { pattern: /^\/tv(?:\/(movie|tv)\/(\d+))?$/, tab: 'tv' },
-  search: { pattern: /^\/search(?:\/(movie|tv)\/(\d+))?$/, tab: 'search' },
-  watchlist: { pattern: /^\/watchlist(?:\/(movie|tv)\/(\d+))?$/, tab: 'watchlist' },
-  watch: { pattern: /^\/(movie|tv)\/(\d+)(?:\/(\d+)-(\d+))?\/watch$/, type: 'watch' }
-};
-
-function parseRoute(path) {
-  for (const [name, config] of Object.entries(routes)) {
-    const match = path.match(config.pattern);
-    if (match) {
-      if (config.type === 'watch') {
-        return {
-          page: 'watch',
-          mediaType: match[1],
-          id: match[2],
-          season: match[3] ? parseInt(match[3]) : null,
-          episode: match[4] ? parseInt(match[4]) : null
-        };
-      }
-      return {
-        page: name,
-        tab: config.tab,
-        mediaType: match[1] || null,
-        id: match[2] || null
-      };
-    }
-  }
-  return { page: 'home', tab: 'home' };
-}
-
-function navigateTo(path, push = true) {
-  const hashPath = '#' + path;
-  if (push) {
-    window.location.hash = hashPath;
-  } else {
-    window.location.replace(hashPath);
-  }
-}
-
-function handleRoute(hash) {
-  // ✅ Strip the '#' so parseRoute can match correctly
-  const cleanPath = (hash || window.location.hash || '#/home').replace('#', '');
-  const route = parseRoute(cleanPath);
-
-  // Handle watch route
-  if (route.page === 'watch') {
-    openVideoPlayerFromRoute(route.mediaType, route.id, route.season, route.episode);
-    return;
-  }
-
-  // Switch tab
-  const tabBtn = document.querySelector(`.tab-btn[data-tab="${route.tab}"]`);
-  if (tabBtn) {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    tabBtn.classList.add('active');
-    document.getElementById(`${route.tab}-tab`)?.classList.add('active');
-    
-    // Load tab content
-    if (['home', 'movies', 'tv'].includes(route.tab)) {
-      const filters = { home: 'all', movies: 'movie', tv: 'tv' };
-      displayContinueWatching(filters[route.tab], `continueWatching-${route.tab}`);
-      loadNewAdditions(route.tab, false);
-    } else if (route.tab === 'watchlist') {
-      displayWatchlist();
-    } else if (route.tab === 'search') {
-      setTimeout(() => searchInput?.focus(), 100);
-    }
-  }
-  
-  // Open modal if ID present
-  if (route.id && route.mediaType) {
-    setTimeout(() => {
-      const item = { id: route.id, media_type: route.mediaType };
-      showMovieDetails(item, false, null, route.tab);
-    }, 300);
-  }
-}
-
-// Handle hash changes (browser back/forward)
-window.addEventListener('hashchange', () => {
-  handleRoute(window.location.hash);
-});
-
-// Handle initial load
-document.addEventListener('DOMContentLoaded', () => {
-  if (!window.location.hash) {
-    window.location.replace('#/home');
-  } else {
-    handleRoute(window.location.hash);
-  }
-});
-
 // ========== EXTERNAL STREAMING SERVICES CONFIG =========
 const externalServices = [
   { name: "BBC iPlayer", logo: "https://upload.wikimedia.org/wikipedia/en/f/fd/BBC_iPlayer_logo_%282021%29.svg", color: "#000000" },
@@ -153,6 +49,7 @@ let externalLinksMap = new Map(); // Map<tmdbId, Map<serviceName, {link, logo, c
 let alternateLinks = new Map();
 let tvAlternateLinks = new Map();
 
+// ========== LOAD MOVIE ALTERNATE LINKS (NEW 4-COLUMN FORMAT) ==========
 // ========== LOAD MOVIE ALTERNATE LINKS (NEW 4-COLUMN FORMAT) ==========
 async function loadAlternateLinks() {
   try {
@@ -587,10 +484,22 @@ function setVideoSource(id, mediaType, season, episode, fallbackUrl, autoResume 
 }
 // ========== TAB NAVIGATION ==========
 document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    
+    btn.classList.add('active');
+    const tabId = `${btn.dataset.tab}-tab`;
+    document.getElementById(tabId)?.classList.add('active');
+    
     const tabName = btn.dataset.tab;
-    navigateTo(`/${tabName}`); // This now adds # automatically
+    // Load content for browse tabs
+    if (['home', 'movies', 'tv'].includes(tabName)) {
+      const filters = { home: 'all', movies: 'movie', tv: 'tv' };
+      displayContinueWatching(filters[tabName], `continueWatching-${tabName}`);
+      loadNewAdditions(tabName, false);
+    }
+    if (tabName === 'watchlist') displayWatchlist();
   });
 });
 // ========== CLEAR MOVIES FROM WATCHING ==========
@@ -734,11 +643,7 @@ function displayContinueWatching(filter = 'all', containerId = 'continueWatching
       ${episodeBadge}
       <div class="movie-title">${title} (${type})${episodeInfo}</div>
     `;
-    div.onclick = () => {
-      const pathParts = window.location.pathname.split('/').filter(Boolean);
-      const sourcePage = pathParts[0] || 'home';
-      showMovieDetails(item, true, null, sourcePage);
-    };
+    div.onclick = () => showMovieDetails(item, true);
     container.appendChild(div);
   });
 }
@@ -764,9 +669,7 @@ function displayWatchlist() {
     `;
     
     div.onclick = () => {
-      const pathParts = window.location.pathname.split('/').filter(Boolean);
-      const sourcePage = pathParts[0] || 'home';
-      showMovieDetails(item, false, null, sourcePage);
+      showMovieDetails(item, false);
     };
     
     container.appendChild(div);
@@ -904,11 +807,7 @@ function displayKeywordResults(items, clear = true) {
       // but keeping it consistent is good.
     };
     
-    div.onclick = () => {
-      const pathParts = window.location.pathname.split('/').filter(Boolean);
-      const sourcePage = pathParts[0] || 'home';
-      showMovieDetails(item, false, null, sourcePage);
-    };
+    div.onclick = () => showMovieDetails(item, false);
     resultsDiv.appendChild(div);
   });
 }
@@ -963,7 +862,7 @@ async function selectPerson(personId, personName) {
   
   isPersonSearch = true;
   currentFilter = 'all';
-  resultsDiv.innerHTML = '<p>Loading movieography...</p>';
+  resultsDiv.innerHTML = '<p>Loading filmography...</p>';
   
   // Reset filter UI
   document.querySelectorAll('.search-filters .filter-btn').forEach(b => b.classList.remove('active'));
@@ -1012,8 +911,8 @@ async function selectPerson(personId, personName) {
     displayPersonResults(worksArray, false);
     
   } catch (e) {
-    console.error("Failed to load movieography:", e);
-    resultsDiv.innerHTML = '<p>Failed to load movieography.</p>';
+    console.error("Failed to load filmography:", e);
+    resultsDiv.innerHTML = '<p>Failed to load filmography.</p>';
   }
 }
 
@@ -1087,7 +986,7 @@ function displayPersonResults(items, append = false) {
     };
     
     div.onclick = () => {
-      // ✅ Collect all roles for this specific movie/show
+      // ✅ Collect all roles for this specific film/show
       const roles = new Set();
       if (item.crew_department) roles.add(item.crew_department);
       if (item.crew_job && item.crew_job !== item.crew_department) roles.add(item.crew_job);
@@ -1096,12 +995,10 @@ function displayPersonResults(items, append = false) {
       const roleStr = roles.size > 0 ? Array.from(roles).join(', ') : 'Unknown';
   
       // ✅ Pass role data to the modal
-      const pathParts = window.location.pathname.split('/').filter(Boolean);
-      const sourcePage = pathParts[0] || 'home';
       showMovieDetails(item, false, { 
         roles: roleStr, 
         personName: item._personName || 'This person' 
-      }, sourcePage);
+      });
     };
     resultsDiv.appendChild(div);
   });
@@ -1221,6 +1118,7 @@ searchInput.addEventListener("input", async () => {
   }
   personSearchTimeout = setTimeout(() => fetchPersonSearch(query), 300);
 });
+
 async function loadResults() {
   if (loading || !currentQuery) return;
   loading = true;
@@ -1284,9 +1182,7 @@ function displayResults(items, append = false) {
     };
 
     div.onclick = () => {
-      const pathParts = window.location.pathname.split('/').filter(Boolean);
-      const sourcePage = pathParts[0] || 'home';
-      showMovieDetails(item, false, null, sourcePage);
+      showMovieDetails(item, false);
     };
 
     resultsDiv.appendChild(div);
@@ -1294,7 +1190,7 @@ function displayResults(items, append = false) {
 }
 
 window.addEventListener("scroll", () => {
-  // ✅ 1. Disable if viewing a person's movieography
+  // ✅ 1. Disable if viewing a person's filmography
   if (isPersonSearch) return; 
   
   // ✅ 2. Handle Keyword Search Infinite Scroll
@@ -1377,11 +1273,9 @@ function renderExternalButtons(tmdbId, modalBody) {
   }
 }
 // ========== MODAL & VIDEO FUNCTIONS ==========
-async function showMovieDetails(item, fromContinueWatching = false, personRoleData = null, sourcePage = null) {
+async function showMovieDetails(item, fromContinueWatching = false, personRoleData = null) {
   const modal = document.getElementById("movieModal");
   const modalBody = document.getElementById("modalBody");
-
-  
   if (!modal || !modalBody) return;
   modalBody.innerHTML = "<p>Loading...</p>";
   modal.style.display = "block";
@@ -1400,7 +1294,6 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
                     item.media_type === "tv" && data.episode_run_time?.[0] ? data.episode_run_time[0] + " min/ep" : "N/A";
     const genres = data.genres?.map(g => g.name).join(", ") || "N/A";
     
-
     // ✅ Build Role HTML if coming from People search
     let roleHTML = '';
     if (personRoleData) {
@@ -1542,17 +1435,9 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
     }
 
     modalBody.innerHTML = modalHTML;
-    
+
     // ✅ Render external streaming buttons
     renderExternalButtons(item.id, modalBody);
-
-    // ✅ Update URL with modal state if source page is known
-    if (sourcePage) {
-      const modalHash = `#/${sourcePage}/${item.media_type}/${item.id}`;
-      if (window.location.hash !== modalHash) {
-        history.replaceState({}, '', modalHash); // ← No handleRoute call needed
-      }
-    }
 
     // ✅ ASYNC TRAILER INJECTION
     (async () => {
@@ -1939,13 +1824,6 @@ function updateModalToUnreleasedState(id, title, nextSeason, nextEpisode) {
 async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath, season = null, episode = null) {
   const modal = document.getElementById("videoModal");
   const titleEl = document.getElementById("videoTitle");
-  const watchHash = season !== null && episode !== null && mediaType === 'tv'
-    ? `#/${mediaType}/${id}/${season}-${episode}/watch`
-    : `#/${mediaType}/${id}/watch`;
-  if (window.location.hash !== watchHash) {
-    history.replaceState({ hash: watchHash }, '', watchHash);
-  }
-  
   if (!modal) return;
   
   const watchlistItem = { id, media_type: mediaType, title: itemTitle, poster_path: posterPath };
@@ -1983,42 +1861,6 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
 
   setupVideoControls(id, mediaType, season, episode, itemTitle);
 }
-
-async function openVideoPlayerFromRoute(mediaType, id, season = null, episode = null) {
-  // Fetch item details and open player
-  try {
-    const endpoint = mediaType === 'movie' ? 'movie' : 'tv';
-    const res = await fetch(`https://api.themoviedb.org/3/${endpoint}/${id}?api_key=${apiKey}`);
-    const data = await res.json();
-    const item = {
-      id: id,
-      media_type: mediaType,
-      title: data.title || data.name,
-      poster_path: data.poster_path
-    };
-
-    // ✅ Use season/episode from route if available
-    let embedUrl = `https://vidsrc-embed.su/embed/${mediaType}/${id}`;
-    if (season !== null && episode !== null && mediaType === 'tv') {
-      embedUrl = `https://vidsrc-embed.su/embed/tv/${id}/${season}-${episode}`;
-    }
-
-    openVideoPlayer(
-      embedUrl,
-      item.title,
-      item.id,
-      mediaType,
-      item.title,
-      item.poster_path,
-      season,
-      episode
-    );
-  } catch (e) {
-    console.error('Failed to load from route:', e);
-    navigateTo('/home');
-  }
-}
-
 async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
   // ✅ Remove old wrapper if it exists
   const oldWrapper = document.getElementById("videoControlsWrapper");
@@ -2149,11 +1991,6 @@ async function navigateEpisode(direction) {
   const epTag = s === 0 ? `Extra ${e}` : `S${s}E${e}`;
   titleEl.textContent = `${currentVideoState.itemTitle} - ${epTag}`;
   
-  const newWatchHash = `#/tv/${id}/${s}-${e}/watch`;
-  if (window.location.hash !== newWatchHash) {
-    history.replaceState({ hash: newWatchHash }, '', newWatchHash);
-  }
-
   try {
     const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${s}?api_key=${apiKey}`);
     const sd = await res.json();
@@ -2252,66 +2089,48 @@ function closeVideoModal() {
   const modal = document.getElementById("videoModal");
   const container = document.querySelector(".video-container");
   const videoEl = document.getElementById("videoPlayer");
-  
   // 💾 Save timestamp ONLY if still in Continue Watching
   if (videoEl && currentVideoState.id) {
     const currentTime = videoEl.currentTime;
     const watched = getWatchedData();
     const key = `${currentVideoState.mediaType}_${currentVideoState.id}`;
     const isInWatched = watched[key] !== undefined;
+    
+    // Only save if still in Continue Watching and watched more than 10 seconds
     if (isInWatched && currentTime > 10) {
       saveVideoTimestamp(
-        currentVideoState.id,
-        currentVideoState.mediaType,
-        currentVideoState.season,
-        currentVideoState.episode,
+        currentVideoState.id, 
+        currentVideoState.mediaType, 
+        currentVideoState.season, 
+        currentVideoState.episode, 
         currentTime
       );
     }
   }
-  
+
   if (modal) modal.style.display = "none";
   if (container) container.innerHTML = '';
-  
+
   const debugEl = document.getElementById('video-timeline-debug');
   if (debugEl) {
     debugEl.textContent = '';
     debugEl.style.display = 'none';
     debugEl.style.color = '#aaa';
   }
-  
+
   document.body.style.overflow = "";
   const controlsWrapper = document.getElementById("videoControlsWrapper");
   if (controlsWrapper) controlsWrapper.remove();
-  
-  // ✅ Update URL: go back to info modal URL WITH source page prefix
-  if (currentVideoState.id && currentVideoState.mediaType) {
-    const { id, mediaType, season, episode } = currentVideoState;
-    
-    // Get the current active tab as the source page
-    const activeTabBtn = document.querySelector('.tab-btn.active');
-    const sourcePage = activeTabBtn?.dataset.tab || 'home';
-    
-    const infoModalHash = season !== null && episode !== null && mediaType === 'tv'
-      ? `#/${sourcePage}/${mediaType}/${id}/${season}-${episode}`
-      : `#/${sourcePage}/${mediaType}/${id}`;
-      
-    if (window.location.hash !== infoModalHash) {
-      history.replaceState({ hash: infoModalHash }, '', infoModalHash);
-    }
-  }
-  
-  // Reset state
-  currentVideoState = {
-    id: null, mediaType: null, season: null, episode: null,
-    itemTitle: null, totalEpisodesInSeason: 0, totalSeasons: 0
+
+  currentVideoState = { 
+    id: null, mediaType: null, season: null, episode: null, 
+    itemTitle: null, totalEpisodesInSeason: 0, totalSeasons: 0 
   };
-  
+
   if (document.getElementById("home-tab")?.classList.contains("active")) {
     displayContinueWatching();
   }
 }
-
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     closeVideoModal();
@@ -2417,23 +2236,9 @@ function displayNewAdditions(items, clear = true, container, hideMovieBadge = fa
       ${badgeHTML}
       <div class="movie-title">${title} (${type}) ${year}</div>
     `;
-    div.onclick = () => {
-      const pathParts = window.location.pathname.split('/').filter(Boolean);
-      const sourcePage = pathParts[0] || 'home';
-      showMovieDetails(item, true, null, sourcePage);
-    };
+    div.onclick = () => showMovieDetails(item, false);
     container.appendChild(div);
   });
-}
-
-// Helper function to extract tab path from hash
-function getTabPathFromHash(hash) {
-  const parts = hash.replace('#', '').split('/').filter(Boolean);
-  // Find the tab name (home/movies/tv/search/watchlist)
-  const tabName = parts.find(p => ['home', 'movies', 'tv', 'search', 'watchlist'].includes(p)) || 'home';
-  // Get repo name if present (first part on GitHub Pages)
-  const repoPart = parts[0] && !['home', 'movies', 'tv', 'search', 'watchlist'].includes(parts[0]) ? parts[0] : null;
-  return repoPart ? `#/${repoPart}/${tabName}` : `#/${tabName}`;
 }
 
 // 🔄 UNIFIED DOMContentLoaded & SCROLL SETUP
@@ -2466,71 +2271,16 @@ document.addEventListener("DOMContentLoaded", () => {
   loadExternalLinks();
   loadTvExternalLinks();
 
+  // Modal Close Logic
   const movieModal = document.getElementById("movieModal");
   const closeBtn = document.querySelector(".close-btn");
   const videoModal = document.getElementById("videoModal");
   const videoCloseBtn = document.querySelector(".video-close");
-
-  // Helper: Extract tab from hash (e.g., "#/home/movie/123" → "#/home")
-  function getTabHash() {
-    const hash = window.location.hash || '#/home';
-    const parts = hash.replace('#', '').split('/').filter(Boolean);
-    const tab = parts.find(p => ['home','movies','tv','search','watchlist'].includes(p)) || 'home';
-    return `#/${tab}`;
-  }
-
-  // Close movie modal + update hash
-  function closeMovieModal() {
-    if (movieModal) movieModal.style.display = "none";
-    window.location.hash = getTabHash();
-  }
-
-  // Close video modal + update hash
-  function closeVideoModalOnly() {
-    if (videoModal) videoModal.style.display = "none";
-    // If coming from video player, go back to info modal hash first
-    if (currentVideoState?.id && currentVideoState?.mediaType) {
-      const { id, mediaType } = currentVideoState;
-      const hashParts = window.location.hash.replace('#','').split('/').filter(Boolean);
-      const sourcePage = hashParts.find(p => ['home','movies','tv','search','watchlist'].includes(p)) || 'home';
-      window.location.hash = `#/${sourcePage}/${mediaType}/${id}`;
-    } else {
-      window.location.hash = getTabHash();
-    }
-  }
-
-  // Movie modal close handlers
-  if (closeBtn && movieModal) {
-    closeBtn.onclick = closeMovieModal;
-  }
-  if (movieModal) {
-    movieModal.onclick = (e) => {
-      if (e.target === movieModal) closeMovieModal();
-    };
-  }
-
-  // Video modal close handlers  
-  if (videoCloseBtn && videoModal) {
-    videoCloseBtn.onclick = closeVideoModalOnly;
-  }
-  if (videoModal) {
-    videoModal.onclick = (e) => {
-      if (e.target === videoModal) closeVideoModalOnly();
-    };
-  }
-
-  // Escape key closes both
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      if (videoModal?.style.display === "block") {
-        closeVideoModalOnly();
-      } else if (movieModal?.style.display === "block") {
-        closeMovieModal();
-      }
-    }
-  });
+  if (closeBtn && movieModal) closeBtn.onclick = () => movieModal.style.display = "none";
+  if (videoCloseBtn && videoModal) videoCloseBtn.onclick = closeVideoModal;
+  if (movieModal) movieModal.onclick = e => { if (e.target === movieModal) movieModal.style.display = "none"; };
+  if (videoModal) videoModal.onclick = e => { if (e.target === videoModal) closeVideoModal(); };
 });
-
 
 document.querySelectorAll('.search-mode-buttons .filter-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -2550,11 +2300,11 @@ document.querySelectorAll('.search-mode-buttons .filter-btn').forEach(btn => {
     
     // Update placeholder
     if (currentSearchMode === 'title') {
-      searchInput.placeholder = "Search for a movie or TV show...";
+      searchInput.placeholder = "Search movies or TV shows...";
     } else if (currentSearchMode === 'genre') {
-      searchInput.placeholder = "Search for a genre (e.g. Science Fiction)...";
+      searchInput.placeholder = "Search for a genre (e.g. Horror, Sci-Fi)...";
     } else {
-      searchInput.placeholder = "Search for a person (e.g. Tom Hanks)...";
+      searchInput.placeholder = "Search for a person...";
     }
   });
 });
@@ -2569,6 +2319,11 @@ document.querySelectorAll('.search-filters .filter-btn').forEach(btn => {
     if (isPersonSearch) {
       displayPersonResults(currentPersonResults, false);
     } else if (isKeywordSearch) {
+      // Re-fetch page 1 for the new filter? Or just re-filter existing?
+      // Since we fetch Movies and TV separately in loadKeywordResults, 
+      // it's easier to just re-run the display function if we have the data.
+      // BUT, loadKeywordResults combines them. 
+      // To keep it simple: Reset to page 1 and reload.
       currentPage = 1;
       resultsDiv.innerHTML = '<p>Loading...</p>';
       loadKeywordResults(false);
