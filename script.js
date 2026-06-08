@@ -353,6 +353,7 @@ function addToWatchlist(item) {
       addedAt: Date.now()
     });
     saveWatchlist(watchlist);
+    updateFolderCounts();
   }
 }
 
@@ -360,6 +361,7 @@ function removeFromWatchlist(item) {
   const watchlist = getWatchlist();
   const filtered = watchlist.filter(w => !(w.id === item.id && w.media_type === item.media_type));
   saveWatchlist(filtered);
+  updateFolderCounts();
 }
 
 // --- Video Timestamp Helpers ---
@@ -831,31 +833,6 @@ function displayContinueWatching(filter = 'all', containerId = 'continueWatching
   });
 }
 
-function displayWatchlist() {
-  const container = document.getElementById("watchlist");
-  const watchlist = getWatchlist();
-  
-  if (watchlist.length === 0) {
-    container.innerHTML = "<p>Your watchlist is empty. Right-click search results to add items!</p>";
-    return;
-  }
-  
-  container.innerHTML = "";
-  watchlist.forEach(item => {
-    const div = document.createElement("div");
-    div.classList.add("movie");
-    const title = item.title || item.name;
-    const type = item.media_type === "movie" ? "Movie" : "TV";
-    
-    div.innerHTML = `
-      <img src="https://image.tmdb.org/t/p/w300${item.poster_path}" alt="${title}">
-      <div class="movie-title">${title} (${type})</div>
-    `;
-
-    div.onclick = () => showMovieDetails(item, false);
-    container.appendChild(div);
-  });
-}
 
 
 // ============================================================================
@@ -973,14 +950,6 @@ function displayKeywordResults(items, clear = true) {
       <img src="https://image.tmdb.org/t/p/w300${item.poster_path}" alt="${title}">
       <div class="movie-title">${title} (${type}) ${year}</div>
     `;
-
-    div.oncontextmenu = (e) => {
-      e.preventDefault();
-      const watchlist = getWatchlist();
-      const inWatchlist = watchlist.some(w => w.id === item.id && w.media_type === item.media_type);
-      if (inWatchlist) removeFromWatchlist(item);
-      else addToWatchlist(item);
-    };
 
     div.onclick = () => showMovieDetails(item, false);
     resultsDiv.appendChild(div);
@@ -1119,14 +1088,6 @@ function displayPersonResults(items, append = false) {
       <div class="movie-title">${title} (${type})</div>
     `;
 
-    div.oncontextmenu = (e) => {
-      e.preventDefault();
-      const watchlist = getWatchlist();
-      const inWatchlist = watchlist.some(w => w.id === item.id && w.media_type === item.media_type);
-      if (inWatchlist) removeFromWatchlist(item);
-      else addToWatchlist(item);
-      displayPersonResults(items, append);
-    };
 
     div.onclick = () => {
       const roles = new Set();
@@ -1244,15 +1205,6 @@ function displayResults(items, append = false) {
       <img src="https://image.tmdb.org/t/p/w300${item.poster_path}" alt="${title}">
       <div class="movie-title">${title} (${type})</div>
     `;
-
-    div.oncontextmenu = (e) => {
-      e.preventDefault();
-      const watchlist = getWatchlist();
-      const inWatchlist = watchlist.some(w => w.id === item.id && w.media_type === item.media_type);
-      if (inWatchlist) removeFromWatchlist(item);
-      else addToWatchlist(item);
-      displayResults(items, append);
-    };
 
     div.onclick = () => showMovieDetails(item, false);
     resultsDiv.appendChild(div);
@@ -1386,18 +1338,28 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
           <button class="play-btn" onclick="openVideoPlayer('https://vsembed.su/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
             ▶ Play Movie
           </button>
-          <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
-            Remove from Continue Watching
-          </button>
+          <div style="position: relative; display: inline-block;">
+          <button class= "action-btn " onclick= "showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${title.replace(/'/g,  "\\' ")}', '${data.poster_path || ''}') " >
+            + Add to Collection
+          </button >
+          <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+            <!-- Options will be populated by JavaScript -->
+          </div>
+        </div>
         `;
       } else {
         actionButtonsHTML = `
           <button class="play-btn" onclick="openVideoPlayer('https://vsembed.su/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
             ▶ Play Movie
           </button>
-          <button class="action-btn" onclick="toggleWatchlistFromModal(${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
-            + Add to Watchlist
-          </button>
+          <div style="position: relative; display: inline-block;">
+            <button class= "action-btn " onclick= "showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${title.replace(/'/g,  "\\' ")}', '${data.poster_path || ''}') " >
+             + Add to Collection
+            </button >
+            <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+              <!-- Options will be populated by JavaScript -->
+            </div>
+          </div>
         `;
       }
     } else if (item.media_type === "tv") {
@@ -1433,9 +1395,14 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
           <button class="play-btn" onclick="openVideoPlayer('https://vsembed.su/embed/tv/${item.id}/1-1', '${title} - S1E1', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', 1, 1)">
             ▶ Play Season 1 Episode 1
           </button>
-          <button class="action-btn" onclick="toggleWatchlistFromModal(${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
-            + Add to Watchlist
-          </button>
+          <div style="position: relative; display: inline-block;">
+            <button class= "action-btn " onclick= "showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${title.replace(/'/g,  "\\' ")}', '${data.poster_path || ''}') " >
+             + Add to Collection
+            </button >
+            <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+              <!-- Options will be populated by JavaScript -->
+            </div>
+          </div>
         `;
       }
     }
@@ -1644,12 +1611,26 @@ function openTrailer(url, title) {
 }
 
 function toggleWatchlistFromModal(id, mediaType, title, posterPath) {
-  const item = { id, media_type: mediaType, title, poster_path: posterPath };
-  const watchlist = getWatchlist();
-  const exists = watchlist.some(w => w.id === id && w.media_type === mediaType);
-  if (exists) removeFromWatchlist(item);
-  else addToWatchlist(item);
-  document.getElementById("movieModal").style.display = "none";
+    const item = { id, media_type: mediaType, title, poster_path: posterPath };
+    const watchlist = getWatchlist();
+    const exists = watchlist.some(w => w.id === id && w.media_type === mediaType);
+    
+    if (exists) {
+        removeFromWatchlist(item);
+    } else {
+        addToWatchlist(item);
+    }
+    
+    // Refresh collections view if it's currently open
+    const collectionsWatchlistView = document.getElementById('collections-watchlist-view');
+    if (collectionsWatchlistView && collectionsWatchlistView.style.display === 'block') {
+        renderWatchlistInCollections();
+    }
+    
+    // Also update folder counts
+    updateFolderCounts();
+    
+    document.getElementById("movieModal").style.display = "none";
 }
 
 function removeFromContinueWatching(id, mediaType) {
@@ -1809,9 +1790,14 @@ function updateModalToUnwatchedState(id, title) {
       <button class="play-btn" onclick="openVideoPlayer('https://vsembed.su/embed/tv/${id}/1-1', '${title.replace(/'/g, "\\'")} - S1E1', ${id}, 'tv', '${title.replace(/'/g, "\\'")}', '${posterPath}', 1, 1)">
         ▶ Play Season 1 Episode 1
       </button>
-      <button class="action-btn" onclick="toggleWatchlistFromModal(${id}, 'tv', '${title.replace(/'/g, "\\'")}', '${posterPath}')">
-        + Add to Watchlist
-      </button>
+      <div style="position: relative; display: inline-block;">
+        <button class="action-btn" onclick="showCollectionDropdown(this, ${id}, 'tv', '${title.replace(/'/g, "\\'")}', '${posterPath}')">
+          + Add to Collection
+        </button>
+        <div id="collection-dropdown-${id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+          <!-- Options will be populated by JavaScript -->
+        </div>
+      </div>
     `;
   }
   document.querySelectorAll('.episode-item.current, .season-toggle.current').forEach(el => el.classList.remove('current'));
@@ -1871,9 +1857,6 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
   modal.style.display = "block";
   document.body.style.overflow = "hidden";
   
-  if (document.getElementById("watchlist-tab")?.classList.contains("active")) {
-    displayWatchlist();
-  }
   
   if (mediaType.trim() === "tv" && season !== null && episode !== null) {
     try {
@@ -2000,12 +1983,1289 @@ function displayNewAdditions(items, clear = true, container, hideMovieBadge = fa
   });
 }
 
+// ============================================================================
+// COLLECTIONS LOGIC
+// ============================================================================
+
+// --- State Variables ---
+let currentEditingFolder = 'watchlist'; 
+let folderDisplaySettings = new Map(); 
+let currentIconType = 'text';
+let currentFolderIcon = '📁'; 
+
+// Get all collections (watchlist + custom folders)
+function getAllCollections() {
+  const collections = [];
+  
+  // Add watchlist as default collection
+  collections.push({ id: 'watchlist', name: 'My Watchlist' });
+  
+  // Get custom collections from DOM
+  const customFolders = document.querySelectorAll('.collection-folder.custom-folder');
+  customFolders.forEach(folder => {
+    const folderId = folder.id;
+    const folderName = folder.querySelector('.folder-name').textContent;
+    collections.push({ id: folderId, name: folderName });
+  });
+  
+  return collections;
+}
+
+// Get items in a specific collection
+function getCollectionItems(collectionId) {
+    if (collectionId === 'watchlist') {
+        return getWatchlist();
+    }
+    const key = `collection_${collectionId}`;
+    return JSON.parse(localStorage.getItem(key) || "[]");
+}
+
+// Save items to a specific collection
+function saveCollectionItems(collectionId, items) {
+    if (collectionId === 'watchlist') {
+        saveWatchlist(items);
+        return;
+    }
+    const key = `collection_${collectionId}`;
+    localStorage.setItem(key, JSON.stringify(items));
+}
+
+// Check if item is in collection
+function isInCollection(collectionId, item) {
+  const items = getCollectionItems(collectionId);
+  return items.some(i => i.id === item.id && i.media_type === item.media_type);
+}
+
+// Add item to collection
+function addToCollection(collectionId, item) {
+    if (isInCollection(collectionId, item)) return;
+    const items = getCollectionItems(collectionId);
+    items.push({ id: item.id, media_type: item.media_type, title: item.title, poster_path: item.poster_path, addedAt: Date.now() });
+    saveCollectionItems(collectionId, items);
+    updateFolderCounts();
+    saveCollectionsState(); // ✅ Sync to string array
+}
+
+function removeFromCollection(collectionId, item) {
+    const items = getCollectionItems(collectionId);
+    const filtered = items.filter(i => !(i.id === item.id && i.media_type === item.media_type));
+    saveCollectionItems(collectionId, filtered);
+    updateFolderCounts();
+    saveCollectionsState(); // ✅ Sync to string array
+}
+
+// Show collection dropdown
+function showCollectionDropdown(button, id, mediaType, title, posterPath) {
+  const dropdownId = `collection-dropdown-${id}`;
+  const dropdown = document.getElementById(dropdownId);
+  const collections = getAllCollections();
+  
+  // Toggle dropdown visibility
+  if (dropdown.style.display === 'block') {
+    dropdown.style.display = 'none';
+    return;
+  }
+  
+  // Hide all other dropdowns
+  document.querySelectorAll('.collection-dropdown').forEach(d => d.style.display = 'none');
+  
+  // Populate dropdown
+  let optionsHTML = '';
+  collections.forEach(collection => {
+    const inCollection = isInCollection(collection.id, { id, media_type: mediaType });
+    const checkmark = inCollection ? '✓ ' : '';
+    optionsHTML += `
+      <div onclick="addToCollectionFromDropdown('${collection.id}', ${id}, '${mediaType}', '${title.replace(/'/g, "\\'")}', '${posterPath}', '${collection.name}')" 
+           style="padding: 10px 15px; cursor: pointer; border-bottom: 1px solid #444; display: flex; justify-content: space-between; align-items: center;">
+        <span>${checkmark}${collection.name}</span>
+        ${inCollection ? '<span style="color: #28a745; font-size: 12px;">Added</span>' : ''}
+      </div>
+    `;
+  });
+  
+  dropdown.innerHTML = optionsHTML;
+  dropdown.style.display = 'block';
+  
+  // Close dropdown when clicking outside
+  setTimeout(() => {
+    document.addEventListener('click', function closeDropdown(e) {
+      if (!dropdown.contains(e.target) && e.target !== button) {
+        dropdown.style.display = 'none';
+        document.removeEventListener('click', closeDropdown);
+      }
+    });
+  }, 100);
+}
+
+// Add item to collection from dropdown
+function addToCollectionFromDropdown(collectionId, id, mediaType, title, posterPath, collectionName) {
+  const item = { id, media_type: mediaType, title, poster_path: posterPath };
+  
+  if (isInCollection(collectionId, item)) {
+    // Remove from collection
+    removeFromCollection(collectionId, item);
+  } else {
+    // Add to collection
+    addToCollection(collectionId, item);
+  }
+  
+  // Hide dropdown
+  const dropdown = document.getElementById(`collection-dropdown-${id}`);
+  if (dropdown) {
+    dropdown.style.display = 'none';
+  }
+  
+  // Refresh modal to update button state
+  const modal = document.getElementById("movieModal");
+  if (modal && modal.style.display === "block") {
+    const currentItem = { id, media_type: mediaType, title, poster_path: posterPath };
+    showMovieDetails(currentItem, false);
+  }
+}
+
+// --- Folder Navigation ---
+function openCollection(type) {
+  if (type === 'watchlist') {
+    document.getElementById('collections-folder-view').style.display = 'none';
+    document.getElementById('collections-watchlist-view').style.display = 'block';
+    renderWatchlistInCollections();
+  }
+}
+
+function closeCollection() {
+  document.getElementById('collections-watchlist-view').style.display = 'none';
+  document.getElementById('collections-folder-view').style.display = 'grid';
+  updateFolderCounts();
+  currentEditingFolder = 'watchlist';
+}
+
+function openCustomCollection(folderId, folderName) {
+  currentEditingFolder = folderId;
+  document.getElementById('collections-folder-view').style.display = 'none';
+  document.getElementById('collections-custom-view').style.display = 'block';
+  const folderEl = document.getElementById(folderId);
+  const currentFolderName = folderEl?.querySelector('.folder-name')?.textContent || folderName;
+  document.getElementById('custom-collection-title').textContent = currentFolderName;
+  renderCustomCollection();
+}
+
+function closeCustomCollection() {
+  document.getElementById('collections-custom-view').style.display = 'none';
+  document.getElementById('collections-folder-view').style.display = 'grid';
+  currentEditingFolder = 'watchlist';
+}
+
+// --- Rendering ---
+function renderWatchlistInCollections() {
+  const container = document.getElementById('collections-watchlist-grid');
+  const watchlist = getWatchlist();
+  container.innerHTML = '';
+  
+  if (watchlist.length === 0) {
+    container.innerHTML = '<p class="empty-state">Your watchlist is empty.</p>';
+    return;
+  }
+
+  watchlist.forEach(item => {
+    const div = document.createElement('div');
+    div.classList.add('movie');
+    const title = item.title || item.name;
+    const type = item.media_type === 'movie' ? 'Movie' : 'TV';
+    div.innerHTML = `
+      <img src="https://image.tmdb.org/t/p/w300${item.poster_path}" alt="${title}">
+      <div class="movie-title">${title} (${type})</div>
+    `;
+    div.onclick = () => showMovieDetails(item, false);
+    container.appendChild(div);
+  });
+}
+
+function renderCustomCollection() {
+    const container = document.getElementById('collections-custom-grid');
+    const items = getCollectionItems(currentEditingFolder);
+    container.innerHTML = '';
+    
+    if (!items || items.length === 0) {
+        container.innerHTML = '<p class="empty-state">This collection is empty.</p>';
+        return;
+    }
+    
+    items.forEach(item => {
+        const div = document.createElement('div');
+        div.classList.add('movie');
+        const title = item.title || item.name;
+        const type = item.media_type === 'movie' ? 'Movie' : 'TV';
+        div.innerHTML = `
+            <img src="https://image.tmdb.org/t/p/w300${item.poster_path}" alt="${title}">
+            <div class="movie-title">${title} (${type})</div>
+        `;
+        div.onclick = () => showMovieDetails(item, false);
+        container.appendChild(div);
+    });
+}
+
+function updateFolderCounts() {
+    // 1. Update Watchlist count
+    const watchlist = getWatchlist();
+    const watchlistCountEl = document.getElementById('watchlist-folder-count');
+    if (watchlistCountEl) {
+        watchlistCountEl.textContent = `${watchlist.length} item${watchlist.length !== 1 ? 's' : ''}`;
+    }
+    
+    // 2. Update Custom Folder counts
+    const customFolders = document.querySelectorAll('.collection-folder.custom-folder');
+    customFolders.forEach(folder => {
+        const folderId = folder.id;
+        const countEl = folder.querySelector('.folder-count');
+        if (countEl) {
+            const items = getCollectionItems(folderId);
+            countEl.textContent = `${items.length} item${items.length !== 1 ? 's' : ''}`;
+        }
+    });
+}
+
+/** Escapes a string for safe CSV storage (handles commas/quotes in names or URLs) */
+function escapeCSV(str) {
+    if (str === null || str === undefined) return '""';
+    str = String(str);
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+}
+
+/** Exports ONE specific collection to a single independent string */
+function exportCollectionToString(collectionId) {
+    const isWatchlist = collectionId === 'watchlist';
+    const collectionName = isWatchlist ? 'My Watchlist' : 
+        (document.getElementById(collectionId)?.querySelector('.folder-name')?.textContent || 'Unknown');
+    
+    const folderEl = document.getElementById(isWatchlist ? 'folder-watchlist' : collectionId);
+    let iconType = 'Text';
+    let iconInfo = '📁';
+    let iconSize = 100; // Default to 100 for custom folders
+
+    if (isWatchlist) {
+        // ✅ Bug Fix 2: Watchlist icon size should always be 0
+        iconSize = 0;
+    } else if (folderEl) {
+        const iconEl = folderEl.querySelector('.folder-icon');
+        const img = iconEl?.querySelector('img');
+        
+        if (img && img.src) {
+            iconType = 'Image';
+            iconInfo = img.src;
+            iconSize = parseInt(img.style.width) || 100;
+        } else {
+            iconType = 'Text';
+            iconInfo = iconEl?.textContent.trim() || '📁';
+            
+            // ✅ Bug Fix 1: Use inline style if available, otherwise default to 100. 
+            // This prevents accidentally capturing the browser's default 16px font size.
+            iconSize = parseInt(iconEl?.style.fontSize) || 100;
+        }
+    }
+
+    // 2. Get Display Toggles (T/F)
+    let showName = 'T';
+    let showCount = 'T';
+    if (!isWatchlist) {
+        const settings = folderDisplaySettings.get(collectionId) || { showName: true, showCount: true };
+        showName = settings.showName ? 'T' : 'F';
+        showCount = settings.showCount ? 'T' : 'F';
+    }
+
+    // 3. Get Items (T{id} or M{id})
+    const items = getCollectionItems(collectionId);
+    const itemStrings = items.map(item => {
+        const prefix = item.media_type === 'tv' ? 'T' : 'M';
+        return `${prefix}${item.id}`;
+    });
+
+    // 4. Combine into ONE single string
+    const row = [
+        escapeCSV(collectionId),
+        escapeCSV(collectionName),
+        escapeCSV(iconType),
+        escapeCSV(iconInfo),
+        iconSize,
+        showName,
+        showCount,
+        ...itemStrings
+    ].join(',');
+    
+    return row;
+}
+
+/** Parses a single CSV line, respecting quoted fields */
+function parseCSVLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+                current += '"';
+                i++; 
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (char === ',' && !inQuotes) {
+            result.push(current);
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    result.push(current);
+    return result;
+}
+
+/** Imports a SINGLE collection from a string, with strict validation */
+/** Imports collections from a CSV string, fetching metadata for each item */
+async function importCollectionFromString(csvString) {
+    if (!csvString || !csvString.trim()) {
+        alert("Import string is empty.");
+        return;
+    }
+
+    const lines = csvString.trim().split('\n');
+    let successCount = 0;
+    let errorCount = 0;
+    const errors = [];
+
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+        const line = lines[lineIndex];
+        if (!line.trim()) continue;
+        
+        try {
+            const fields = parseCSVLine(line);
+            
+            // ✅ FIX: Detect format and shift indices accordingly
+            const isNewFormat = fields.length >= 7 && (fields[0].trim() === 'watchlist' || fields[0].trim().startsWith('folder-'));
+            let folderId, name, iconType, iconInfo, iconSizeStr, showNameStr, showCountStr, itemsRaw;
+
+            if (isNewFormat) {
+                folderId = fields[0].trim();
+                name = fields[1].trim();
+                iconType = fields[2].trim();
+                iconInfo = fields[3].trim();
+                iconSizeStr = fields[4].trim();
+                showNameStr = fields[5].trim().toUpperCase();
+                showCountStr = fields[6].trim().toUpperCase();
+                itemsRaw = fields.slice(7);
+            } else {
+                folderId = 'folder-' + Date.now() + Math.random().toString(36).substr(2, 5);
+                name = fields[0].trim();
+                iconType = fields[1].trim();
+                iconInfo = fields[2].trim();
+                iconSizeStr = fields[3].trim();
+                showNameStr = fields[4].trim().toUpperCase();
+                showCountStr = fields[5].trim().toUpperCase();
+                itemsRaw = fields.slice(6);
+            }
+
+            // --- STRICT VALIDATION ---
+            if (iconType !== 'Text' && iconType !== 'Image') throw new Error(`Invalid IconType: "${iconType}".`);
+            if (iconType === 'Text' && iconInfo.length > 3) throw new Error(`IconInfo for Text must be ≤ 3 chars. Got: "${iconInfo}".`);
+            
+            const iconSize = parseInt(iconSizeStr, 10);
+            if (isNaN(iconSize) || iconSize < 0 || iconSize > 120) throw new Error(`Invalid IconSize: "${iconSizeStr}". Must be 0-120.`);
+            if (showNameStr !== 'T' && showNameStr !== 'F') throw new Error(`Invalid ShowCollectionName: "${showNameStr}". Must be 'T' or 'F'.`);
+            if (showCountStr !== 'T' && showCountStr !== 'F') throw new Error(`Invalid ShowItemCount: "${showCountStr}". Must be 'T' or 'F'.`);
+
+            // --- FETCH METADATA ---
+            const parsedItems = [];
+            for (const itemStr of itemsRaw) {
+                const match = itemStr.trim().match(/^([TM])(\d+)$/);
+                if (!match) throw new Error(`Invalid item format: "${itemStr}". Must be 'T' or 'M' + numbers.`);
+                
+                const mediaType = match[1] === 'T' ? 'tv' : 'movie';
+                const id = parseInt(match[2], 10);
+                
+                try {
+                    const res = await fetch(`https://api.themoviedb.org/3/${mediaType}/${id}?api_key=${apiKey}&language=en-US`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        parsedItems.push({
+                            id: id, media_type: mediaType,
+                            title: data.title || data.name || "Unknown",
+                            poster_path: data.poster_path, addedAt: Date.now()
+                        });
+                    } else {
+                        parsedItems.push({ id, media_type: mediaType, title: "Unknown", poster_path: null, addedAt: Date.now() });
+                    }
+                } catch (e) {
+                    parsedItems.push({ id, media_type: mediaType, title: "Unknown", poster_path: null, addedAt: Date.now() });
+                }
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+
+            // --- APPLY TO APP ---
+            if (name.toLowerCase() === 'my watchlist' || folderId === 'watchlist') {
+                saveCollectionItems('watchlist', parsedItems);
+            } else {
+                // ✅ FIX: Use the stable folderId
+                saveCollectionItems(folderId, parsedItems);
+                folderDisplaySettings.set(folderId, { showName: showNameStr === 'T', showCount: showCountStr === 'T' });
+
+                const folderHTML = `
+                    <div class="collection-folder custom-folder" id="${folderId}" onclick="openCustomCollection('${folderId}', '${name.replace(/'/g, "\\'")}')">
+                        <div class="folder-icon" style="font-size: ${iconSize}px;">${iconType === 'Text' ? iconInfo : `<img src="${iconInfo}" alt="icon" style="width: ${iconSize}px; height: ${iconSize}px; object-fit: contain;">`}</div>
+                        <div class="folder-name">${name}</div>
+                        <div class="folder-count">${parsedItems.length} item${parsedItems.length !== 1 ? 's' : ''}</div>
+                    </div>
+                `;
+                document.getElementById('add-folder-btn').insertAdjacentHTML('beforebegin', folderHTML);
+            }
+            successCount++;
+
+        } catch (err) {
+            errorCount++;
+            errors.push(`Line ${lineIndex + 1}: ${err.message}`);
+        }
+    }
+
+    updateFolderCounts();
+    
+    let message = `✅ Successfully imported: ${successCount} collection(s).`;
+    if (errorCount > 0) message += `\n\n❌ Failed: ${errorCount} collection(s).\nErrors:\n- ${errors.join('\n- ')}`;
+    alert(message);
+    
+    // Refresh views if open
+    if (document.getElementById('collections-custom-view').style.display === 'block') renderCustomCollection();
+    if (document.getElementById('collections-watchlist-view').style.display === 'block') renderWatchlistInCollections();
+}
+
+// --- Watchlist & Folder Management ---
+function clearWatchlistFromCollections() {
+    if (confirm("Are you sure you want to clear your entire Watchlist? This cannot be undone!")) {
+        localStorage.removeItem(STORAGE_WATCHLIST);
+        renderWatchlistInCollections();
+        updateFolderCounts();
+        closeCollectionsSettings();
+        saveCollectionsState(); // ✅ Sync to string array
+    }
+}
+
+document.getElementById('add-folder-btn').onclick = (e) => {
+    e.stopPropagation();
+    const name = "New Collection";
+    if (name && name.trim() !== "") {
+        const folderId = 'folder-' + Date.now();
+        const folderName = name.trim();
+        const folderHTML = `<div class="collection-folder custom-folder" id="${folderId}" onclick="openCustomCollection('${folderId}', '${folderName.replace(/'/g, "\\'")}')"> <div class="folder-icon" style="font-size: 100px;">📁</div> <div class="folder-name">${folderName}</div> <div class="folder-count">0 items</div> </div>`;
+        document.getElementById('add-folder-btn').insertAdjacentHTML('beforebegin', folderHTML);
+        
+        const slider = document.getElementById('iconSizeSlider');
+        if (slider) {
+            slider.value = 100;
+            document.getElementById('iconSizeValue').textContent = '100';
+        }
+        currentEditingFolder = folderId;
+        openCollectionsSettings();
+        saveCollectionsState(); // ✅ Sync to string array
+    }
+};
+
+function deleteCustomFolder() {
+    if (confirm("Are you sure you want to delete this folder? This cannot be undone!")) {
+        const folderEl = document.getElementById(currentEditingFolder);
+        if (folderEl) folderEl.remove();
+        
+        // ✅ FIX 1: Remove the deleted folder from the pinned list if it was pinned
+        let pinned = getPinnedCollections();
+        const pinnedIndex = pinned.indexOf(currentEditingFolder);
+        if (pinnedIndex > -1) {
+            pinned.splice(pinnedIndex, 1);
+            savePinnedCollections(pinned);
+        }
+        
+        closeCollectionsSettings();
+        closeCustomCollection(); 
+        saveCollectionsState(); // ✅ Sync to string array
+        
+        // ✅ FIX 2: Instantly refresh the pinned collections UI across all tabs
+        renderPinnedCollections('all');
+        renderPinnedCollections('movie');
+        renderPinnedCollections('tv');
+    }
+}
+
+// --- Settings Modal Logic ---
+function openCollectionsSettings() {
+  const modal = document.getElementById('collectionsSettingsModal');
+  const dangerTitle = document.getElementById('settings-danger-title');
+  const dangerDesc = document.getElementById('settings-danger-desc');
+  const dangerBtn = document.getElementById('settings-danger-btn');
+  const nameToggle = document.getElementById('toggleCollectionName');
+  const countToggle = document.getElementById('toggleItemCount');
+
+  const dataEditor = document.getElementById('collectionDataEditor');
+  if (dataEditor) {
+    dataEditor.style.display = 'none';
+  }
+
+  modal.style.display = 'block';
+
+  selectIconType(currentIconType);
+
+  // Handle Display Toggles visibility and state
+  if (currentEditingFolder === 'watchlist') {
+    nameToggle.parentElement.parentElement.style.display = 'none';
+    countToggle.parentElement.parentElement.style.display = 'none';
+  } else {
+    nameToggle.parentElement.parentElement.style.display = 'flex';
+    countToggle.parentElement.parentElement.style.display = 'flex';
+    const settings = folderDisplaySettings.get(currentEditingFolder);
+    if (settings) {
+      nameToggle.checked = settings.showName !== false;
+      countToggle.checked = settings.showCount !== false;
+    } else {
+      nameToggle.checked = true;
+      countToggle.checked = true;
+    }
+  }
+
+  // Handle Technical Zone
+  if (currentEditingFolder === 'watchlist') {
+    dangerTitle.textContent = 'Technical Settings';
+    dangerDesc.textContent = 'This will permanently remove all items from your watchlist. This action cannot be undone.';
+    dangerBtn.textContent = 'Clear Watchlist';
+    dangerBtn.onclick = clearWatchlistFromCollections;
+  } else {
+    dangerTitle.textContent = 'Technical Settings';
+    dangerDesc.textContent = 'This will permanently delete this collection. This action cannot be undone.';
+    dangerBtn.textContent = 'Delete Collection';
+    dangerBtn.onclick = deleteCustomFolder;
+  }
+
+  // ✅ FIX: Sync the currentFolderIcon variable with the actual folder's current icon when opening
+  const actualFolderId = currentEditingFolder === 'watchlist' ? 'folder-watchlist' : currentEditingFolder;
+  const actualFolderEl = document.getElementById(actualFolderId);
+  if (actualFolderEl) {
+      const iconEl = actualFolderEl.querySelector('.folder-icon');
+      // Only update if it's a text icon (not an image)
+      if (iconEl && !iconEl.querySelector('img')) {
+          currentFolderIcon = iconEl.textContent.trim() || '📁';
+      }
+  }
+
+  updateFolderPreview();
+  updatePinButtonState();
+}
+
+function closeCollectionsSettings() {
+  document.getElementById('collectionsSettingsModal').style.display = 'none';
+}
+
+function updateFolderPreview() {
+  const previewIcon = document.getElementById('previewIcon');
+  const previewName = document.getElementById('previewName');
+  const previewCount = document.getElementById('previewCount');
+  const previewEl = document.getElementById('folderPreview');
+  
+  if (!previewIcon || !previewName || !previewCount || !previewEl) return;
+  
+  // Update icon based on current type
+  if (currentIconType === 'text') {
+    previewIcon.innerHTML = currentFolderIcon;
+    // ✅ FIX: Read the current size from the slider instead of hardcoding 100px
+    const currentSize = document.getElementById('iconSizeSlider')?.value || 100;
+    previewIcon.style.fontSize = `${currentSize}px`; 
+  } else if (currentIconType === 'image') {
+    const imageUrl = document.getElementById('folderImageUrl').value.trim();
+    const currentSize = document.getElementById('iconSizeSlider')?.value || 100;
+    
+    if (imageUrl) {
+      previewIcon.innerHTML = `<img src="${imageUrl}" alt="icon" style="width: ${currentSize}px; height: ${currentSize}px; object-fit: contain;">`;
+    } else {
+      previewIcon.innerHTML = currentFolderIcon;
+      previewIcon.style.fontSize = `${currentSize}px`;
+    }
+  }
+  
+  // Update name
+  const folderEl = currentEditingFolder === 'watchlist' ? 
+    document.getElementById('folder-watchlist') : 
+    document.getElementById(currentEditingFolder);
+    
+  if (folderEl) {
+    const nameEl = folderEl.querySelector('.folder-name');
+    if (nameEl) {
+      previewName.textContent = nameEl.textContent;
+    }
+    
+    const countEl = folderEl.querySelector('.folder-count');
+    if (countEl) {
+      previewCount.textContent = countEl.textContent;
+    }
+  }
+  
+  // Apply hide/show classes based on toggles
+  const nameToggle = document.getElementById('toggleCollectionName');
+  const countToggle = document.getElementById('toggleItemCount');
+  
+  if (nameToggle && !nameToggle.checked) {
+    previewEl.classList.add('hide-name');
+  } else {
+    previewEl.classList.remove('hide-name');
+  }
+  
+  if (countToggle && !countToggle.checked) {
+    previewEl.classList.add('hide-count');
+  } else {
+    previewEl.classList.remove('hide-count');
+  }
+}
+
+function renameCollection() {
+    const newName = document.getElementById('collectionRenameInput').value.trim();
+    if (!newName) return;
+    const folderId = currentEditingFolder === 'watchlist' ? 'folder-watchlist' : currentEditingFolder;
+    const folderEl = document.getElementById(folderId);
+    if (folderEl) {
+        const nameEl = folderEl.querySelector('.folder-name');
+        if (nameEl) nameEl.textContent = newName;
+    }
+    const previewName = document.getElementById('previewName');
+    if (previewName) previewName.textContent = newName;
+    document.getElementById('collectionRenameInput').value = '';
+    saveCollectionsState(); // ✅ Sync to string array
+}
+
+function selectIconType(type) {
+  currentIconType = type;
+  
+  // Update button states
+  document.querySelectorAll('.icon-type-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.type === type);
+  });
+  
+  // Show/hide option panels
+  document.querySelectorAll('.icon-option').forEach(panel => {
+    panel.style.display = 'none';
+  });
+  
+  if (type === 'text') {
+    document.getElementById('textSelector').style.display = 'block';
+  } else if (type === 'image') {
+    document.getElementById('imageSelector').style.display = 'block';
+  } else if (type === 'custom') {
+    document.getElementById('customSelector').style.display = 'block';
+  }
+}
+
+function saveTextIcon() {
+    const text = document.getElementById('folderTextIcon').value.trim();
+    if (text.length <= 3) {
+        const targetId = currentEditingFolder === 'watchlist' ? 'folder-watchlist' : currentEditingFolder;
+        const folderIcon = document.querySelector(`#${targetId} .folder-icon`);
+        
+        const currentSize = document.getElementById('iconSizeSlider')?.value || 100; 
+        
+        if (folderIcon) { 
+            folderIcon.innerHTML = text; 
+            folderIcon.style.fontSize = `${currentSize}px`; 
+            currentFolderIcon = text; // ✅ FIX: Sync the global state variable
+        }
+        updateFolderPreview();
+        saveCollectionsState(); 
+    } else {
+        alert("Please enter up to 3 characters.");
+    }
+}
+
+function updateTextPreview(text) {
+  if (text.length <= 3) {
+    const previewIcon = document.querySelector('.preview-folder .folder-icon');
+    if (previewIcon) {
+      previewIcon.innerHTML = text;
+      const currentSize = document.getElementById('iconSizeSlider')?.value || 100;
+      previewIcon.style.fontSize = `${currentSize}px`; 
+      currentFolderIcon = text; // ✅ FIX: Sync the state variable while typing too
+    }
+  }
+}
+
+function saveImageIcon() {
+    const url = document.getElementById('folderImageUrl').value.trim();
+    const size = document.getElementById('iconSizeSlider')?.value || 100;
+    if (url) {
+        const targetId = currentEditingFolder === 'watchlist' ? 'folder-watchlist' : currentEditingFolder;
+        const folderIcon = document.querySelector(`#${targetId} .folder-icon`);
+        if (folderIcon) { folderIcon.innerHTML = `<img src="${url}" alt="icon" style="width: 100px; height: 100px; object-fit: contain;">`; }
+        const previewIcon = document.querySelector('.preview-folder .folder-icon');
+        if (previewIcon) { previewIcon.innerHTML = `<img src="${url}" alt="icon" style="width: ${size}px; height: ${size}px; object-fit: contain;">`; }
+        saveCollectionsState(); // ✅ Sync to string array
+    } else {
+        alert("Please enter a valid image URL.");
+    }
+}
+
+function updateIconSize(size) {
+    document.getElementById('iconSizeValue').textContent = size;
+    const previewIcon = document.querySelector('.preview-folder .folder-icon');
+    if (previewIcon) {
+        const img = previewIcon.querySelector('img');
+        if (img) { img.style.width = `${size}px`; img.style.height = `${size}px`; } 
+        else { previewIcon.style.fontSize = `${size}px`; }
+    }
+    const targetId = currentEditingFolder === 'watchlist' ? 'folder-watchlist' : currentEditingFolder;
+    const folderIcon = document.querySelector(`#${targetId} .folder-icon`);
+    if (folderIcon) {
+        const img = folderIcon.querySelector('img');
+        if (img) { img.style.width = `${size}px`; img.style.height = `${size}px`; } 
+        else { folderIcon.style.fontSize = `${size}px`; }
+    }
+    saveCollectionsState(); // ✅ Sync to string array
+}
+
+function toggleCollectionNameDisplay() {
+    const checkbox = document.getElementById('toggleCollectionName');
+    const folderId = currentEditingFolder;
+    if (folderId === 'watchlist') return;
+    const folderEl = document.getElementById(folderId);
+    if (folderEl) folderEl.classList.toggle('hide-name', !checkbox.checked);
+    if (!folderDisplaySettings.has(folderId)) folderDisplaySettings.set(folderId, { showName: true, showCount: true });
+    folderDisplaySettings.get(folderId).showName = checkbox.checked;
+    updateFolderPreview();
+    saveCollectionsState(); // ✅ Sync to string array
+}
+
+function toggleItemCountDisplay() {
+    const checkbox = document.getElementById('toggleItemCount');
+    const folderId = currentEditingFolder;
+    if (folderId === 'watchlist') return;
+    const folderEl = document.getElementById(folderId);
+    if (folderEl) folderEl.classList.toggle('hide-count', !checkbox.checked);
+    if (!folderDisplaySettings.has(folderId)) folderDisplaySettings.set(folderId, { showName: true, showCount: true });
+    folderDisplaySettings.get(folderId).showCount = checkbox.checked;
+    updateFolderPreview();
+    saveCollectionsState(); // ✅ Sync to string array
+}
+
+// --- Pinning Logic ---
+const STORAGE_PINNED = "movieBrowser_pinned_ids";
+
+function getPinnedCollections() {
+    return JSON.parse(localStorage.getItem(STORAGE_PINNED) || "[]");
+}
+
+function savePinnedCollections(ids) {
+    localStorage.setItem(STORAGE_PINNED, JSON.stringify(ids));
+}
+
+function togglePinCollection() {
+    const folderId = currentEditingFolder;
+    let pinned = getPinnedCollections();
+    
+    const index = pinned.indexOf(folderId);
+    
+    if (index > -1) {
+        // Already pinned, so unpin it
+        pinned.splice(index, 1);
+    } else {
+        // Not pinned, so pin it
+        pinned.push(folderId);
+    }
+    
+    savePinnedCollections(pinned);
+    updatePinButtonState();
+    renderPinnedCollections('all');
+    renderPinnedCollections('movie');
+    renderPinnedCollections('tv');
+}
+
+function updatePinButtonState() {
+    const btn = document.getElementById('pinCollectionBtn');
+    if (!btn) return;
+    
+    const pinned = getPinnedCollections();
+    const isPinned = pinned.includes(currentEditingFolder);
+    
+    if (isPinned) {
+        btn.textContent = "📌 Unpin from Home Page";
+        btn.style.background = "#dc3545"; // Red
+    } else {
+        btn.textContent = "📌 Pin to Home Page";
+        btn.style.background = "#333"; // Default
+    }
+}
+
+function renderPinnedCollections(filterType = 'all') {
+    // Determine which container to use based on the filter type
+    let containerId = 'pinnedCollectionsContainer'; // Default for Home tab
+    if (filterType === 'movie') containerId = 'pinnedCollectionsContainer-movies';
+    if (filterType === 'tv') containerId = 'pinnedCollectionsContainer-tv';
+
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    container.innerHTML = '';
+    const pinnedIds = getPinnedCollections();
+    if (pinnedIds.length === 0) return;
+    
+    pinnedIds.forEach(folderId => {
+        let name = "Unknown Collection";
+        if (folderId === 'watchlist') {
+            name = "My Watchlist";
+        } else {
+            const folderEl = document.getElementById(folderId);
+            if (folderEl) {
+                const nameEl = folderEl.querySelector('.folder-name');
+                if (nameEl) name = nameEl.textContent;
+            }
+        }
+        
+        let items = getCollectionItems(folderId);
+        
+        // ✅ FILTER ITEMS: Only keep items that match the current tab
+        if (filterType === 'movie') {
+            items = items.filter(item => item.media_type === 'movie');
+        } else if (filterType === 'tv') {
+            items = items.filter(item => item.media_type === 'tv');
+        }
+        
+        // ✅ SKIP EMPTY: If no items match the filter, don't render this collection at all
+        if (items.length === 0) return;
+        
+        const section = document.createElement('div');
+        section.style.marginBottom = '30px';
+        
+        const header = document.createElement('h2');
+        header.textContent = `${name}`;
+        header.style.marginBottom = '10px';
+        section.appendChild(header);
+        
+        const scrollContainer = document.createElement('div');
+        scrollContainer.className = 'horizontal-scroll';
+        
+        items.forEach(item => {
+            const div = document.createElement('div');
+            div.classList.add('movie');
+            const title = item.title || item.name;
+            const type = item.media_type === 'movie' ? 'Movie' : 'TV';
+            div.innerHTML = `
+                <img src="https://image.tmdb.org/t/p/w300${item.poster_path}" alt="${title}">
+                <div class="movie-title">${title} (${type})</div>
+            `;
+            div.onclick = () => showMovieDetails(item, false);
+            scrollContainer.appendChild(div);
+        });
+        
+        section.appendChild(scrollContainer);
+        container.appendChild(section);
+    });
+}
+
+// ============================================================================
+// ARRANGE PINNED COLLECTIONS LOGIC
+// ============================================================================
+
+function openArrangePinnedModal() {
+    const modal = document.getElementById('arrangePinnedModal');
+    const list = document.getElementById('arrangePinnedList');
+    list.innerHTML = '';
+    
+    const pinnedIds = getPinnedCollections();
+    
+    // Filter out any pinned IDs that no longer exist (e.g., deleted folders)
+    const validPinnedIds = pinnedIds.filter(id => {
+        if (id === 'watchlist') return true;
+        return document.getElementById(id) !== null;
+    });
+    
+    // Clean up localStorage if a deleted folder was still pinned
+    if (validPinnedIds.length !== pinnedIds.length) {
+        savePinnedCollections(validPinnedIds);
+    }
+
+    if (validPinnedIds.length === 0) {
+        list.innerHTML = '<p style="text-align:center; color:#888; padding: 20px;">No collections are currently pinned.</p>';
+    } else {
+        validPinnedIds.forEach((folderId, index) => {
+            let name = folderId === 'watchlist' ? 'My Watchlist' : (document.getElementById(folderId)?.querySelector('.folder-name')?.textContent || 'Unknown Collection');
+            
+            const item = document.createElement('div');
+            item.style.cssText = 'display: flex; align-items: center; justify-content: space-between; background: #222; padding: 12px 15px; border-radius: 6px; border: 1px solid #333;';
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = name;
+            nameSpan.style.cssText = 'flex: 1; font-weight: bold; font-size: 15px;';
+            
+            const controls = document.createElement('div');
+            controls.style.cssText = 'display: flex; gap: 8px;';
+            
+            const upBtn = document.createElement('button');
+            upBtn.textContent = '▲';
+            upBtn.className = 'action-btn';
+            upBtn.style.cssText = 'padding: 6px 12px; margin: 0; font-size: 12px;';
+            upBtn.disabled = index === 0;
+            upBtn.onclick = () => movePinnedItem(index, -1);
+            
+            const downBtn = document.createElement('button');
+            downBtn.textContent = '▼';
+            downBtn.className = 'action-btn';
+            downBtn.style.cssText = 'padding: 6px 12px; margin: 0; font-size: 12px;';
+            downBtn.disabled = index === validPinnedIds.length - 1;
+            downBtn.onclick = () => movePinnedItem(index, 1);
+            
+            controls.appendChild(upBtn);
+            controls.appendChild(downBtn);
+            
+            item.appendChild(nameSpan);
+            item.appendChild(controls);
+            list.appendChild(item);
+        });
+    }
+    
+    modal.style.display = 'block';
+}
+
+function closeArrangePinnedModal() {
+    document.getElementById('arrangePinnedModal').style.display = 'none';
+}
+
+function movePinnedItem(index, direction) {
+    const pinnedIds = getPinnedCollections();
+    const newIndex = index + direction;
+    
+    if (newIndex >= 0 && newIndex < pinnedIds.length) {
+        // Swap the items
+        const temp = pinnedIds[index];
+        pinnedIds[index] = pinnedIds[newIndex];
+        pinnedIds[newIndex] = temp;
+        
+        // Save immediately to localStorage
+        savePinnedCollections(pinnedIds);
+        
+        // Re-render the modal list to update button disabled states
+        openArrangePinnedModal();
+    }
+}
+
+function savePinnedOrder() {
+    closeArrangePinnedModal();
+    // Refresh all pinned views across all tabs instantly
+    renderPinnedCollections('all');
+    renderPinnedCollections('movie');
+    renderPinnedCollections('tv');
+}
+
+// ============================================================================
+// COLLECTION DATA EDITOR (Show & Save)
+// ============================================================================
+
+/** Validates, fetches metadata, and updates an existing collection from a CSV string */
+async function updateCollectionFromString(csvString, targetFolderId) {
+    if (!csvString || !csvString.trim()) {
+        alert("Data string is empty.");
+        return false;
+    }
+
+    try {
+        const fields = parseCSVLine(csvString.trim());
+        
+        // ✅ FIX: Detect format and shift indices accordingly
+        const isNewFormat = fields.length >= 7 && (fields[0].trim() === 'watchlist' || fields[0].trim().startsWith('folder-'));
+        let name, iconType, iconInfo, iconSizeStr, showNameStr, showCountStr, itemsRaw;
+
+        if (isNewFormat) {
+            name = fields[1].trim();
+            iconType = fields[2].trim();
+            iconInfo = fields[3].trim();
+            iconSizeStr = fields[4].trim();
+            showNameStr = fields[5].trim().toUpperCase();
+            showCountStr = fields[6].trim().toUpperCase();
+            itemsRaw = fields.slice(7);
+        } else {
+            name = fields[0].trim();
+            iconType = fields[1].trim();
+            iconInfo = fields[2].trim();
+            iconSizeStr = fields[3].trim();
+            showNameStr = fields[4].trim().toUpperCase();
+            showCountStr = fields[5].trim().toUpperCase();
+            itemsRaw = fields.slice(6);
+        }
+
+        // --- STRICT VALIDATION ---
+        if (iconType !== 'Text' && iconType !== 'Image') {
+            throw new Error(`Invalid IconType: "${iconType}". Must be 'Text' or 'Image'.`);
+        }
+        if (iconType === 'Text' && iconInfo.length > 3) {
+            throw new Error(`IconInfo for Text must be 3 characters or less. Got: "${iconInfo}" (${iconInfo.length} chars).`);
+        }
+        const iconSize = parseInt(iconSizeStr, 10);
+        if (isNaN(iconSize) || iconSize < 0 || iconSize > 120) {
+            throw new Error(`Invalid IconSize: "${iconSizeStr}". Must be a number between 0 and 120.`);
+        }
+        if (showNameStr !== 'T' && showNameStr !== 'F') {
+            throw new Error(`Invalid ShowCollectionName: "${showNameStr}". Must be 'T' or 'F'.`);
+        }
+        if (showCountStr !== 'T' && showCountStr !== 'F') {
+            throw new Error(`Invalid ShowItemCount: "${showCountStr}". Must be 'T' or 'F'.`);
+        }
+
+        // --- FETCH METADATA FOR EACH ITEM ---
+        const parsedItems = [];
+        const saveBtn = document.getElementById("saveCollectionDataBtn");
+        const originalBtnText = saveBtn ? saveBtn.textContent : "Save";
+        
+        if (saveBtn) {
+            saveBtn.textContent = `Fetching details (0/${itemsRaw.length})...`;
+            saveBtn.disabled = true;
+        }
+
+        for (let i = 0; i < itemsRaw.length; i++) {
+            const itemStr = itemsRaw[i].trim(); // ✅ FIXED: was "trimا()"
+            const match = itemStr.match(/^([TM])(\d+)$/);
+            
+            if (!match) {
+                throw new Error(`Invalid item format: "${itemStr}". Must be 'T' or 'M' followed by numbers (e.g., T123).`);
+            }
+            
+            const mediaType = match[1] === 'T' ? 'tv' : 'movie';
+            const id = parseInt(match[2], 10);
+            
+            if (saveBtn) saveBtn.textContent = `Fetching details (${i + 1}/${itemsRaw.length})...`;
+
+            try {
+                const res = await fetch(`https://api.themoviedb.org/3/${mediaType}/${id}?api_key=${apiKey}&language=en-US`);
+                if (res.ok) {
+                    const data = await res.json();
+                    parsedItems.push({
+                        id: id,
+                        media_type: mediaType, // ✅ FIXED: was "media _type"
+                        title: data.title || data.name || "Unknown Title",
+                        poster_path: data.poster_path,
+                        addedAt: Date.now()
+                    });
+                } else {
+                    parsedItems.push({ id, media_type: mediaType, title: "Unknown Title", poster_path: null, addedAt: Date.now() });
+                }
+            } catch (e) {
+                console.warn(`Failed to fetch metadata for ${mediaType} ${id}`, e);
+                parsedItems.push({ id, media_type: mediaType, title: "Unknown Title", poster_path: null, addedAt: Date.now() }); // ✅ FIXED: was "parsed Items"
+            }
+            
+            // Tiny delay to prevent TMDB API rate limiting
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        if (saveBtn) {
+            saveBtn.textContent = originalBtnText;
+            saveBtn.disabled = false;
+        }
+
+        // --- APPLY CHANGES IN-PLACE ---
+        const isWatchlist = targetFolderId === 'watchlist';
+        const folderIdToUpdate = isWatchlist ? 'folder-watchlist' : targetFolderId;
+        const folderEl = document.getElementById(folderIdToUpdate); // ✅ FIXED: was "getElementByI d"
+
+        // 1. Save Items to LocalStorage
+        saveCollectionItems(targetFolderId, parsedItems);
+
+        // 2. Update DOM
+        if (folderEl) { // ✅ FIXED: was "f olderEl"
+            const nameEl = folderEl.querySelector('.folder-name');
+            if (nameEl && !isWatchlist) nameEl.textContent = name;
+
+            const iconEl = folderEl.querySelector('.folder-icon');
+            if (iconEl) {
+                if (iconType === 'Text') {
+                    iconEl.innerHTML = iconInfo;
+                    iconEl.style.fontSize = `${iconSize}px`;
+                    const img = iconEl.querySelector('img');
+                    if (img) img.remove(); // ✅ FIXED: was "remo ve"
+                } else {
+                    iconEl.innerHTML = `<img src="${iconInfo}" alt="icon" style="width: ${iconSize}px; height: ${iconSize}px; object-fit: contain;">`;
+                }
+            }
+
+            if (!isWatchlist) {
+                folderEl.classList.toggle('hide-name', showNameStr !== 'T');
+                folderEl.classList.toggle('hide-count', showCountStr !== 'T');
+                folderDisplaySettings.set(targetFolderId, { showName: showNameStr === 'T', showCount: showCountStr === 'T' });
+            }
+        }
+
+        // 3. Refresh UI
+        updateFolderCounts();
+        updateFolderPreview();
+        
+        if (!isWatchlist && document.getElementById('collections-custom-view').style.display === 'block') {
+            renderCustomCollection();
+        } else if (isWatchlist && document.getElementById('collections-watchlist-view').style.display === 'block') {
+            renderWatchlistInCollections();
+        }
+
+        alert(`✅ Collection data saved successfully!\n\nItems updated with metadata: ${parsedItems.length}`);
+        saveCollectionsState();
+        return true;
+
+    } catch (err) {
+        const saveBtn = document.getElementById("saveCollectionDataBtn");
+        if (saveBtn) {
+            saveBtn.textContent = "💾 Save Data Changes";
+            saveBtn.disabled = false;
+        }
+        alert(`❌ Invalid Data String:\n\n${err.message}\n\nPlease check your formatting and try again.`);
+        return false;
+    }
+}
+
+/** Saves ALL collections (Watchlist + Custom) as a single array of CSV strings */
+function saveCollectionsState() {
+    const collections = getAllCollections();
+    const stringsArray = collections.map(collection => exportCollectionToString(collection.id));
+    localStorage.setItem('movieBrowser_collections_strings', JSON.stringify(stringsArray));
+}
+
+async function loadCollectionsState() {
+    const savedStrings = localStorage.getItem('movieBrowser_collections_strings');
+    if (!savedStrings) return; 
+    
+    try {
+        const stringsArray = JSON.parse(savedStrings);
+        if (!Array.isArray(stringsArray)) return;
+        
+        document.querySelectorAll('.collection-folder.custom-folder').forEach(el => el.remove());
+        folderDisplaySettings.clear();
+        
+        for (const csvString of stringsArray) {
+            if (!csvString || !csvString.trim()) continue;
+            
+            const fields = parseCSVLine(csvString.trim());
+            
+            // ✅ FIX: Detect if it's the new format (starts with 'watchlist' or 'folder-')
+            const isNewFormat = fields.length >= 7 && (fields[0].trim() === 'watchlist' || fields[0].trim().startsWith('folder-'));
+            
+            let folderId, name, iconType, iconInfo, iconSizeStr, showNameStr, showCountStr, itemsRaw;
+
+            if (isNewFormat) {
+                folderId = fields[0].trim();
+                name = fields[1].trim();
+                iconType = fields[2].trim();
+                iconInfo = fields[3].trim();
+                iconSizeStr = fields[4].trim();
+                showNameStr = fields[5].trim().toUpperCase();
+                showCountStr = fields[6].trim().toUpperCase();
+                itemsRaw = fields.slice(7);
+            } else {
+                // Fallback for old format (pre-fix)
+                folderId = 'folder-' + Date.now() + Math.random().toString(36).substr(2, 5);
+                name = fields[0].trim();
+                iconType = fields[1].trim();
+                iconInfo = fields[2].trim();
+                iconSizeStr = fields[3].trim();
+                showNameStr = fields[4].trim().toUpperCase();
+                showCountStr = fields[5].trim().toUpperCase();
+                itemsRaw = fields.slice(6);
+            }
+             
+            const parsedItems = [];
+            for (const itemStr of itemsRaw) {
+                const match = itemStr.trim().match(/^([TM])(\d+)$/);
+                if (match) {
+                    const mediaType = match[1] === 'T' ? 'tv' : 'movie';
+                    const id = parseInt(match[2], 10);
+                    
+                    let cachedItem = null;
+                    const allColls = getAllCollections();
+                    for (const coll of allColls) {
+                        const items = getCollectionItems(coll.id);
+                        const found = items.find(i => i.id === id && i.media_type === mediaType);
+                        if (found && found.title && found.title !== "Unknown" && found.title !== "Imported Item") {
+                            cachedItem = found;
+                            break;
+                        }
+                    }
+                    
+                    if (cachedItem) {
+                        parsedItems.push(cachedItem);
+                    } else {
+                        try {
+                            const res = await fetch(`https://api.themoviedb.org/3/${mediaType}/${id}?api_key=${apiKey}&language=en-US`);
+                            if (res.ok) {
+                                const data = await res.json();
+                                parsedItems.push({
+                                    id: id, media_type: mediaType,
+                                    title: data.title || data.name || "Unknown",
+                                    poster_path: data.poster_path, addedAt: Date.now()
+                                });
+                            } else {
+                                parsedItems.push({ id, media_type: mediaType, title: "Unknown", poster_path: null, addedAt: Date.now() });
+                            }
+                        } catch (e) {
+                            parsedItems.push({ id, media_type: mediaType, title: "Unknown", poster_path: null, addedAt: Date.now() });
+                        }
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                }
+            }
+            
+            if (name.toLowerCase() === 'my watchlist' || folderId === 'watchlist') {
+                saveCollectionItems('watchlist', parsedItems);
+            } else {
+                // ✅ FIX: Use the stable folderId instead of generating a new random one!
+                saveCollectionItems(folderId, parsedItems);
+                folderDisplaySettings.set(folderId, { 
+                    showName: showNameStr === 'T', 
+                    showCount: showCountStr === 'T'  
+                });
+                
+                const folderHTML = `
+                    <div class="collection-folder custom-folder" id="${folderId}" onclick="openCustomCollection('${folderId}', '${name.replace(/'/g, "\\'")}')">
+                        <div class="folder-icon" style="font-size: ${iconSizeStr}px;">${iconType === 'Text' ? iconInfo : `<img src="${iconInfo}" alt="icon" style="width: ${iconSizeStr}px; height: ${iconSizeStr}px; object-fit: contain;">`}</div>
+                        <div class="folder-name">${name}</div>
+                        <div class="folder-count">${parsedItems.length} item${parsedItems.length !== 1 ? 's' : ''}</div>
+                    </div>
+                `;
+                document.getElementById('add-folder-btn').insertAdjacentHTML('beforebegin', folderHTML);
+            }
+        }
+        updateFolderCounts();
+        renderPinnedCollections('all');
+        
+    } catch (e) {
+        console.error("Failed to load collections from strings:", e);
+    }
+}
 
 // ============================================================================
 // 10. EVENT LISTENERS & INITIALIZATION
 // ============================================================================
+document.getElementById("pinCollectionBtn")?.addEventListener("click", togglePinCollection);
+
+document.getElementById("showCollectionDataBtn")?.addEventListener("click", () => {
+    const textarea = document.getElementById('collectionDataTextarea');
+    const editor = document.getElementById('collectionDataEditor');
+    
+    // Generate the current string and show it
+    textarea.value = exportCollectionToString(currentEditingFolder);
+    editor.style.display = 'block';
+});
+
+document.getElementById("saveCollectionDataBtn")?.addEventListener("click", async () => {
+    const textarea = document.getElementById('collectionDataTextarea');
+    const csvString = textarea.value.trim();
+    
+    const success = await updateCollectionFromString(csvString, currentEditingFolder);
+    if (success) {
+        document.getElementById('collectionDataEditor').style.display = 'none';
+    }
+});
+
+document.getElementById("cancelDataEditBtn")?.addEventListener("click", () => {
+    document.getElementById('collectionDataEditor').style.display = 'none';
+});
 
 document.addEventListener("DOMContentLoaded", () => {
+  loadCollectionsState();
+  renderPinnedCollections('all');
   // Initialize tabs
   ['home', 'movies', 'tv'].forEach(tab => {
     loadNewAdditions(tab, false);
@@ -2043,6 +3303,23 @@ document.addEventListener("DOMContentLoaded", () => {
   if (videoCloseBtn && videoModal) videoCloseBtn.onclick = closeVideoModal;
   if (movieModal) movieModal.onclick = e => { if (e.target === movieModal) movieModal.style.display = "none"; };
   if (videoModal) videoModal.onclick = e => { if (e.target === videoModal) closeVideoModal(); };
+  // Collections Settings Modal click-off handler
+  const collectionsSettingsModal = document.getElementById("collectionsSettingsModal");
+  if (collectionsSettingsModal) {
+    collectionsSettingsModal.onclick = e => {
+      if (e.target === collectionsSettingsModal) {
+        closeCollectionsSettings();
+      }
+    };
+  }
+  const imageUrlInput = document.getElementById('folderImageUrl');
+  if (imageUrlInput) {
+    imageUrlInput.addEventListener('input', () => {
+      if (currentIconType === 'image') {
+        updateFolderPreview();
+      }
+    });
+  }
 });
 
 // Tab switching logic
@@ -2060,8 +3337,15 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
       const filters = { home: 'all', movies: 'movie', tv: 'tv' };
       displayContinueWatching(filters[tabName], `continueWatching-${tabName}`);
       loadNewAdditions(tabName, false);
+
+      if (tabName === 'home') {
+        renderPinnedCollections('all');
+      } else if (tabName === 'movies') {
+        renderPinnedCollections('movie');
+      } else if (tabName === 'tv') {
+        renderPinnedCollections('tv');
+      }
     }
-    if (tabName === 'watchlist') displayWatchlist();
   });
 });
 
@@ -2144,59 +3428,11 @@ document.getElementById("clearMoviesFromWatching")?.addEventListener("click", ()
   }
 });
 
-document.getElementById("exportCsv")?.addEventListener("click", () => {
-  const watched = getWatchedData();
-  const items = Object.values(watched);
-  if (items.length === 0) {
-    alert("No watch history to export!");
-    return;
-  }
-  const headers = ["ID", "Title", "Type", "Season", "Episode", "Date Added", "Last Watched"];
-  const rows = items.map(item => {
-    return [
-      item.id,
-      `"${(item.title || item.name).replace(/"/g, '""')}"`,
-      item.media_type,
-      item.currentSeason || "N/A",
-      item.currentEpisode || "N/A",
-      new Date(item.addedAt).toLocaleString(),
-      item.lastWatched ? new Date(item.lastWatched).toLocaleString() : "N/A"
-    ].join(", ");
-  });
-  const csv = [headers.join(", "), ...rows].join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `watch-history-${new Date().toISOString().split("T")[0]}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-});
-
-document.getElementById("clearData")?.addEventListener("click", () => {
-  if (confirm("Are you sure? This will delete all watch history and watchlist!")) {
-    localStorage.removeItem(STORAGE_WATCHED);
-    localStorage.removeItem(STORAGE_WATCHLIST);
-    clearAllVideoProgressKeys();
-    displayContinueWatching();
-    displayWatchlist();
-    alert("All data cleared!");
-  }
-});
-
 document.getElementById("clearContinueWatching")?.addEventListener("click", () => {
   if (confirm("Are you sure you want to clear all Continue Watching items?")) {
     localStorage.removeItem(STORAGE_WATCHED);
     clearAllVideoProgressKeys();
     displayContinueWatching();
     alert("Continue Watching cleared!");
-  }
-});
-
-document.getElementById("clearWatchlist")?.addEventListener("click", () => {
-  if (confirm("Are you sure you want to clear your Watchlist?")) {
-    localStorage.removeItem(STORAGE_WATCHLIST);
-    displayWatchlist();
-    alert("Watchlist cleared!");
   }
 });
