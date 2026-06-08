@@ -953,6 +953,277 @@ UNRELEASED EPISODES
 }
 
 /* ========================================
+COLLECTIONS FOLDERS
+======================================== */
+/* Collection Dropdown Styles */
+.collection-dropdown {
+  background: #222;
+  border: 1px solid #444;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.collection-dropdown div {
+  transition: background 0.2s;
+}
+
+.collection-dropdown div:hover {
+  background: #3a3a3a;
+}
+
+.collection-dropdown div:not(:last-child) {
+  border-bottom: 1px solid #333;
+}
+
+.collections-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 20px;
+  padding: 10px 0;
+}
+
+.collection-folder {
+  background: #222;
+  border: 2px solid #333;
+  border-radius: 8px;
+  padding: 0px 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.2s, border-color 0.2s, background 0.2s;
+  
+  /* ✨ Flexbox for perfect centering */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 150px; /* Ensures all folders have the same height for centering */
+  gap: 5px; /* Handles spacing between icon, name, and count automatically */
+}
+
+.collection-folder:hover {
+  transform: scale(1.05);
+  border-color: #e50914;
+  background: #2a2a2a;
+}
+
+.folder-icon {
+  margin-bottom: 8px; /* Gap handles spacing now */
+}
+
+.folder-name {
+  font-weight: bold;
+  font-size: 16px;
+  margin-bottom: 0;
+}
+
+.folder-count {
+  color: #888;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.collection-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ========================================
+FOLDER DISPLAY TOGGLES
+======================================== */
+.collection-folder.hide-name .folder-name {
+  display: none;
+}
+
+.collection-folder.hide-count .folder-count {
+  display: none;
+}
+/* ========================================
+COLLECTIONS SETTINGS
+======================================== */
+
+.preview-folder {
+  background: #222;
+  border: 2px solid #333;
+  border-radius: 8px;
+  padding: 0px 10px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 130px; /* Match folder width */
+  min-height: 150px;
+  margin: 0 auto; /* Center it */
+  gap: 5px;
+  transition: all 0.3s;
+}
+
+.preview-folder .folder-icon {
+  margin-bottom: 8px;
+}
+
+.preview-folder .folder-icon img {
+  object-fit: contain;
+}
+
+.preview-folder .folder-name {
+  font-weight: bold;
+  font-size: 14px;
+  margin-bottom: 0;
+}
+
+.preview-folder .folder-count {
+  color: #888;
+  font-size: 12px;
+  margin-bottom: 0;
+}
+
+.preview-folder.hide-name .folder-name {
+  display: none;
+}
+
+.preview-folder.hide-count .folder-count {
+  display: none;
+}
+
+.icon-type-toggle {
+  display: flex;
+  gap: 10px;
+  margin: 15px 0;
+}
+
+.icon-type-btn {
+  flex: 1;
+  padding: 12px;
+  font-size: 15px;
+}
+
+.icon-type-btn.active {
+  background: #e50914 !important; /* Bright red to show it's selected */
+  border-color: #e50914;
+  font-weight: bold;
+}
+
+.icon-option {
+  padding: 15px;
+  background: #1a1a1a;
+  border-radius: 8px;
+  margin: 10px 0;
+}
+
+#folderTextIcon {
+  padding: 10px;
+  font-size: 32px;
+  text-align: center;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background: #222;
+  color: white;
+}
+
+#folderImageUrl {
+  padding: 10px;
+  font-size: 14px;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background: #222;
+  color: white;
+}
+
+/* ========================================
+TOGGLE SWITCH STYLES
+======================================== */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 26px;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #333;
+  transition: 0.3s;
+  border-radius: 26px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: #e50914;
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(24px);
+}
+
+/* ========================================
+RANGE SLIDER STYLING
+======================================== */
+input[type=range] {
+  -webkit-appearance: none;
+  background: transparent;
+  padding: 0 0;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  background: #e50914;
+  cursor: pointer;
+  margin-top: -6px;
+}
+input[type=range]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+  background: #444;
+  border-radius: 2px;
+}
+
+/* ========================================
+ADD FOLDER BUTTON STYLING
+======================================== */
+#add-folder-btn {
+  font-size: 48px;
+  background: transparent;
+  border: 2px dashed #444;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+#add-folder-btn:hover {
+  border-color: #e50914;
+  background: rgba(229, 9, 20, 0.05);
+}
+
+/* ========================================
 SEARCH SECTION LAYOUT
 ======================================== */
 .search-section {
