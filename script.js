@@ -646,7 +646,7 @@ async function navigateEpisode(direction) {
   const container = document.querySelector(".video-container");
   container.innerHTML = '';
   const linkData = getTvAlternateLink(id, s, e);
-  const defaultSrc = `https://vsembed.su/embed/tv/${id}/${s}-${e}`;
+  const defaultSrc = `https://www.vidking.net/embed/tv/${id}/${s}/${e}`;
   
   if (linkData && linkData.videos.length > 0 && linkData.videos[0].toLowerCase().endsWith('.mp4')) {
     currentPlaybackLinks = linkData.videos;
@@ -1335,7 +1335,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
     if (item.media_type === "movie") {
       if (isInWatched) {
         actionButtonsHTML = `
-          <button class="play-btn" onclick="openVideoPlayer('https://vsembed.su/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
+          <button class="play-btn" onclick="openVideoPlayer('https://www.vidking.net/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
             ▶ Play Movie
           </button>
           <div style="position: relative; display: inline-block;">
@@ -1349,7 +1349,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
         `;
       } else {
         actionButtonsHTML = `
-          <button class="play-btn" onclick="openVideoPlayer('https://vsembed.su/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
+          <button class="play-btn" onclick="openVideoPlayer('https://www.vidking.net/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
             ▶ Play Movie
           </button>
           <div style="position: relative; display: inline-block;">
@@ -1377,7 +1377,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
           `;
         } else {
           actionButtonsHTML = `
-            <button class="play-btn" onclick="openVideoPlayer('https://vsembed.su/embed/tv/${item.id}/${currentSeason}-${currentEpisode}', '${title} - S${currentSeason}E${currentEpisode}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${currentSeason}, ${currentEpisode})">
+            <button class="play-btn" onclick="openVideoPlayer('https://www.vidking.net/embed/tv/${item.id}/${currentSeason}/${currentEpisode}', '${title} - S${currentSeason}E${currentEpisode}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${currentSeason}, ${currentEpisode})">
               ▶ Play Season ${currentSeason} Episode ${currentEpisode}
             </button>
             <div class="tv-action-group">
@@ -1392,7 +1392,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
         }
       } else {
         actionButtonsHTML = `
-          <button class="play-btn" onclick="openVideoPlayer('https://vsembed.su/embed/tv/${item.id}/1-1', '${title} - S1E1', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', 1, 1)">
+          <button class="play-btn" onclick="openVideoPlayer('https://www.vidking.net/embed/tv/${item.id}/1/1', '${title} - S1E1', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', 1, 1)">
             ▶ Play Season 1 Episode 1
           </button>
           <div style="position: relative; display: inline-block;">
@@ -1514,7 +1514,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
                   const playBtnHTML = isUnreleased 
                     ? `<span class="episode-play disabled" title="Not released yet" style="background:#555;cursor:not-allowed">⏳</span>`
                     : `<button class="episode-play" title="Play episode"
-                       onclick="openVideoPlayer('https://vsembed.su/embed/tv/${item.id}/${seasonNum}-${ep.episode_number}', '${videoTitle}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${seasonNum}, ${ep.episode_number})">
+                       onclick="openVideoPlayer('https://www.vidking.net/embed/tv/${item.id}/${seasonNum}/${ep.episode_number}', '${videoTitle}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${seasonNum}, ${ep.episode_number})">
                        ▶
                        </button>`;
                   
@@ -1725,7 +1725,7 @@ function updateModalUI(id, mediaType, title, nextSeason, nextEpisode) {
   
   if (modalActions) {
     modalActions.innerHTML = `
-      <button class="play-btn" id="tempPlayBtn" onclick="openVideoPlayer('https://vsembed.su/embed/tv/${id}/${nextSeason}-${nextEpisode}', '${title.replace(/'/g, "\\'")} - S${nextSeason}E${nextEpisode}', ${id}, '${mediaType}', '${title.replace(/'/g, "\\'")}', '${posterPath}', ${nextSeason}, ${nextEpisode})">
+      <button class="play-btn" id="tempPlayBtn" onclick="openVideoPlayer('https://www.vidking.net/embed/tv/${id}/${nextSeason}/${nextEpisode}', '${title.replace(/'/g, "\\'")} - S${nextSeason}E${nextEpisode}', ${id}, '${mediaType}', '${title.replace(/'/g, "\\'")}', '${posterPath}', ${nextSeason}, ${nextEpisode})">
         ▶ Play Season ${nextSeason} Episode ${nextEpisode}
       </button>
       <div class="tv-action-group">
@@ -1787,7 +1787,7 @@ function updateModalToUnwatchedState(id, title) {
   const modalActions = document.querySelector('.modal-actions');
   if (modalActions) {
     modalActions.innerHTML = `
-      <button class="play-btn" onclick="openVideoPlayer('https://vsembed.su/embed/tv/${id}/1-1', '${title.replace(/'/g, "\\'")} - S1E1', ${id}, 'tv', '${title.replace(/'/g, "\\'")}', '${posterPath}', 1, 1)">
+      <button class="play-btn" onclick="openVideoPlayer('https://www.vidking.net/embed/tv/${id}/1/1', '${title.replace(/'/g, "\\'")} - S1E1', ${id}, 'tv', '${title.replace(/'/g, "\\'")}', '${posterPath}', 1, 1)">
         ▶ Play Season 1 Episode 1
       </button>
       <div style="position: relative; display: inline-block;">
