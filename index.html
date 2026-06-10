@@ -207,12 +207,13 @@
       <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #444;">
         <h3 id="settings-danger-title" style="color: #ff6b6b; margin-top: 0; font-size: 18px;">Technical Settings</h3>
         <button id="pinCollectionBtn" class="action-btn" style="width: 100%; margin-bottom: 10px;">📌 Pin to Home Page</button>
-        <button class="action-btn" onclick="openArrangePinnedModal()" style="width: 100%; margin-bottom: 30px; background: #28a745;">Arrange Pinned Collections</button>
-        <button id="showCollectionDataBtn" class="action-btn" style="width: 100%; margin-bottom: 10px;">📝 Show Collection Data</button>
+        <button class="action-btn" onclick="openArrangePinnedModal()" style="width: 100%; margin-bottom: 10px;">Arrange Pinned Collections</button>
+        <button class="action-btn" onclick="openArrangeItemsModal()" style="width: 100%; margin-bottom: 30px;">Arrange Items in this Collection</button>
+        <button id="showCollectionDataBtn" class="action-btn" style="width: 100%; margin-bottom: 10px;">Show Collection Data</button>
     
         <div id="collectionDataEditor" style="display: none;">
             <textarea id="collectionDataTextarea" style="width: 100%; height: 100px; background: #111; color: #0f0; border: 1px solid #444; border-radius: 4px; padding: 10px; font-family: monospace; font-size: 12px; resize: vertical; box-sizing: border-box;" placeholder="Collection data string will appear here..."></textarea>
-            <button id="saveCollectionDataBtn" class="action-btn" style="width: 100%; margin-top: 10px; background: #28a745;">💾 Save Data Changes</button>
+            <button id="saveCollectionDataBtn" class="action-btn" style="width: 100%; margin-top: 10px; background: #28a745;">Save Data Changes</button>
             <button id="cancelDataEditBtn" class="action-btn" style="width: 100%; margin-top: 5px; background: #555;">Cancel</button the editor>
         </div>
         <p id="settings-danger-desc" style="font-size: 14px; color: #aaa; text-align: left; padding: 0; margin-bottom: 15px;">
@@ -223,7 +224,6 @@
     </div>
   </div>
   
-  <!-- ✅ ADD THIS: Arrange Pinned Collections Modal -->
   <div id="arrangePinnedModal" class="modal">
     <div class="modal-content" style="max-width: 500px;">
       <span class="close-btn" onclick="closeArrangePinnedModal()">&times;</span>
@@ -233,6 +233,18 @@
         <!-- Populated by JavaScript -->
       </div>
       <button class="action-btn" style="width: 100%; margin-top: 20px; background: #28a745;" onclick="savePinnedOrder()">Done</button>
+    </div>
+  </div>
+
+  <div id="arrangeItemsModal" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+      <span class="close-btn" onclick="closeArrangeItemsModal()">&times;</span>
+      <h2>Arrange Items</h2>
+      <p style="color: #aaa; font-size: 14px; margin-bottom: 20px;">Use the arrows to change the display order of items in this collection.</p>
+      <div id="arrangeItemsList" style="display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto;">
+        <!-- Populated by JavaScript -->
+      </div>
+      <button class="action-btn" style="width: 100%; margin-top: 20px; background: #28a745;" onclick="saveItemOrder()">Done</button>
     </div>
   </div>
 
