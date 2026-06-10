@@ -1338,12 +1338,17 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
           <button class="play-btn" onclick="openVideoPlayer('https://www.vidking.net/embed/movie/${item.id}?color=e50914&autoPlay=true', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
             ▶ Play Movie
           </button>
-          <div style="position: relative; display: inline-block;">
-          <button class= "action-btn " onclick= "showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${title.replace(/'/g,  "\\' ")}', '${data.poster_path || ''}') " >
-            + Add to Collection
-          </button >
-          <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
-            <!-- Options will be populated by JavaScript -->
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 15px; margin-top: 15px;">
+            <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
+              Remove from Continue Watching
+            </button>
+            <div style="position: relative; display: inline-block;">
+            <button class= "action-btn " onclick= "showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${title.replace(/'/g,  "\\' ")}', '${data.poster_path || ''}') " >
+              + Add to Collection
+            </button >
+            <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+              <!-- Options will be populated by JavaScript -->
+            </div>
           </div>
         </div>
         `;
@@ -1374,6 +1379,14 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
                 Remove from Continue Watching
               </button>
             </div>
+            <div style="position: relative; display: inline-block;">
+              <button class= "action-btn " onclick= "showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${title.replace(/'/g,  "\\' ")}', '${data.poster_path || ''}') " >
+               + Add to Collection
+              </button >
+              <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                <!-- Options will be populated by JavaScript -->
+              </div>
+            </div>
           `;
         } else {
           actionButtonsHTML = `
@@ -1387,6 +1400,14 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
               <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
                 Remove from Continue Watching
               </button>
+            </div>
+            <div style="position: relative; display: inline-block;">
+              <button class= "action-btn " onclick= "showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${title.replace(/'/g,  "\\' ")}', '${data.poster_path || ''}') " >
+               + Add to Collection
+              </button >
+              <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                <!-- Options will be populated by JavaScript -->
+              </div>
             </div>
           `;
         }
@@ -2323,7 +2344,6 @@ function parseCSVLine(line) {
     return result;
 }
 
-/** Imports a SINGLE collection from a string, with strict validation */
 /** Imports collections from a CSV string, fetching metadata for each item */
 async function importCollectionFromString(csvString) {
     if (!csvString || !csvString.trim()) {
@@ -2368,6 +2388,9 @@ async function importCollectionFromString(csvString) {
             }
 
             // --- STRICT VALIDATION ---
+            if (name.includes("'") || name.includes('"')) {
+                throw new Error("Name cannot contain Apostrophes or Quotation Marks");
+            }
             if (iconType !== 'Text' && iconType !== 'Image') throw new Error(`Invalid IconType: "${iconType}".`);
             if (iconType === 'Text' && iconInfo.length > 3) throw new Error(`IconInfo for Text must be ≤ 3 chars. Got: "${iconInfo}".`);
             
@@ -2624,6 +2647,10 @@ function updateFolderPreview() {
 function renameCollection() {
     const newName = document.getElementById('collectionRenameInput').value.trim();
     if (!newName) return;
+    if (newName.includes("'") || newName.includes('"')) {
+        alert("Name cannot contain Apostrophes or Quotation Marks");
+        return;
+    }
     const folderId = currentEditingFolder === 'watchlist' ? 'folder-watchlist' : currentEditingFolder;
     const folderEl = document.getElementById(folderId);
     if (folderEl) {
@@ -2956,6 +2983,107 @@ function savePinnedOrder() {
 }
 
 // ============================================================================
+// ARRANGE ITEMS IN COLLECTION LOGIC
+// ============================================================================
+
+function openArrangeItemsModal() {
+    const modal = document.getElementById('arrangeItemsModal');
+    const list = document.getElementById('arrangeItemsList');
+    list.innerHTML = '';
+    
+    const collectionId = currentEditingFolder;
+    let items = getCollectionItems(collectionId);
+    
+    if (items.length === 0) {
+        list.innerHTML = '<p style="text-align:center; color:#888; padding: 20px;">This collection is empty.</p>';
+    } else {
+        items.forEach((item, index) => {
+            const div = document.createElement('div');
+            div.style.cssText = 'display: flex; align-items: center; justify-content: space-between; background: #222; padding: 10px 15px; border-radius: 6px; border: 1px solid #333;';
+            
+            // Left side: Poster + Title
+            const leftSide = document.createElement('div');
+            leftSide.style.cssText = 'display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;';
+            
+            const img = document.createElement('img');
+            img.src = item.poster_path ? `https://image.tmdb.org/t/p/w92${item.poster_path}` : 'https://via.placeholder.com/45x68?text=?';
+            img.style.cssText = 'width: 30px; height: 45px; object-fit: cover; border-radius: 4px;';
+            
+            const titleSpan = document.createElement('span');
+            titleSpan.textContent = item.title || 'Unknown Title';
+            titleSpan.style.cssText = 'font-weight: bold; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
+            
+            leftSide.appendChild(img);
+            leftSide.appendChild(titleSpan);
+            
+            // Right side: Controls
+            const controls = document.createElement('div');
+            controls.style.cssText = 'display: flex; gap: 8px;';
+            
+            const upBtn = document.createElement('button');
+            upBtn.textContent = '▲';
+            upBtn.className = 'action-btn';
+            upBtn.style.cssText = 'padding: 6px 12px; margin: 0; font-size: 12px;';
+            upBtn.disabled = index === 0;
+            upBtn.onclick = () => moveItemInCollection(index, -1);
+            
+            const downBtn = document.createElement('button');
+            downBtn.textContent = '▼';
+            downBtn.className = 'action-btn';
+            downBtn.style.cssText = 'padding: 6px 12px; margin: 0; font-size: 12px;';
+            downBtn.disabled = index === items.length - 1;
+            downBtn.onclick = () => moveItemInCollection(index, 1);
+            
+            controls.appendChild(upBtn);
+            controls.appendChild(downBtn);
+            
+            div.appendChild(leftSide);
+            div.appendChild(controls);
+            list.appendChild(div);
+        });
+    }
+    
+    modal.style.display = 'block';
+}
+
+function closeArrangeItemsModal() {
+    document.getElementById('arrangeItemsModal').style.display = 'none';
+}
+
+function moveItemInCollection(index, direction) {
+    const collectionId = currentEditingFolder;
+    let items = getCollectionItems(collectionId);
+    const newIndex = index + direction;
+    
+    if (newIndex >= 0 && newIndex < items.length) {
+        // Swap the items
+        const temp = items[index];
+        items[index] = items[newIndex];
+        items[newIndex] = temp;
+        
+        // Save immediately to LocalStorage
+        saveCollectionItems(collectionId, items);
+        
+        // Re-render the modal list to update button disabled states
+        openArrangeItemsModal();
+    }
+}
+
+function saveItemOrder() {
+    closeArrangeItemsModal();
+    
+    // Refresh the current view instantly
+    if (currentEditingFolder === 'watchlist') {
+        renderWatchlistInCollections();
+    } else {
+        renderCustomCollection();
+    }
+    
+    // Also refresh folder counts just in case
+    updateFolderCounts();
+}
+
+// ============================================================================
 // COLLECTION DATA EDITOR (Show & Save)
 // ============================================================================
 
@@ -2992,6 +3120,9 @@ async function updateCollectionFromString(csvString, targetFolderId) {
         }
 
         // --- STRICT VALIDATION ---
+        if (name.includes("'") || name.includes('"')) {
+            throw new Error("Name cannot contain Apostrophes or Quotation Marks");
+        }
         if (iconType !== 'Text' && iconType !== 'Image') {
             throw new Error(`Invalid IconType: "${iconType}". Must be 'Text' or 'Image'.`);
         }
@@ -3365,11 +3496,11 @@ document.querySelectorAll('.search-mode-buttons .filter-btn').forEach(btn => {
     currentPersonResults = [];
 
     if (currentSearchMode === 'title') {
-      searchInput.placeholder = "Search movies or TV shows...";
+      searchInput.placeholder = "Search for a movie or TV show...";
     } else if (currentSearchMode === 'genre') {
-      searchInput.placeholder = "Search for a genre (e.g. Horror, Sci-Fi)...";
+      searchInput.placeholder = "Search for a genre (e.g. Science Fiction)...";
     } else {
-      searchInput.placeholder = "Search for a person...";
+      searchInput.placeholder = "Search for a person (e.g. Tom Hanks)...";
     }
   });
 });
