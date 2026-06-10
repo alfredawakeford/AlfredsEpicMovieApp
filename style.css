@@ -473,20 +473,21 @@ MOVIE/SHOW CARDS
     border-radius: 6px;
     font-size: 14px;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: filter 0.2s;
     margin: 0;
 }
 
 .action-btn:hover {
-    background: #444;
+    filter: brightness(1.333333);
 }
 
 .action-btn.danger {
     background: #8b0000;
+    transition: filter 0.2s;
 }
 
 .action-btn.danger:hover {
-    background: #a00000;
+    filter: brightness(1.333333);
 }
 
 .watched-btn {
@@ -497,12 +498,12 @@ MOVIE/SHOW CARDS
     border-radius: 6px;
     font-size: 14px;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: filter 0.2s;
     margin: 0;
 }
 
 .watched-btn:hover {
-    background: #c82333;
+    filter: brightness(1.333333);
 }
 
 .episode-done-btn {
@@ -513,12 +514,12 @@ MOVIE/SHOW CARDS
     border-radius: 6px;
     font-size: 14px;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: filter 0.2s;
     margin: 0;
 }
 
 .episode-done-btn:hover {
-    background: #218838;
+    filter: brightness(1.333333);
 }
 
 /* TV Action Group - for "I watched | Remove" side by side */
@@ -532,6 +533,17 @@ MOVIE/SHOW CARDS
 
 .tv-action-group button {
     min-width: 140px;
+}
+
+/* ========================================
+PIN COLLECTION BUTTON HOVER FIX
+======================================== */
+#pinCollectionBtn {
+    transition: filter 0.2s;
+}
+
+#pinCollectionBtn:hover {
+    filter: brightness(1.333333); /* Brightens the button whether it's gray or red */
 }
 
 /* ========================================
