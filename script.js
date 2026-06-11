@@ -12,7 +12,7 @@ const resultsDiv = document.getElementById("results");
 // Search & Pagination State
 let currentPage = 1;
 let currentQuery = "";
-let currentFilter = "all"; // 'all', 'movie', or 'tv'
+let currentFilter = "all"; // 'all', 'movie', or 'tv' 
 let lastSearchResults = [];
 let loading = false;
 
