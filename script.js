@@ -570,7 +570,8 @@ function setVideoSource(id, mediaType, season, episode, fallbackUrl, autoResume 
         // ✅ NEW: Generate multiple iframe fallback URLs
         const iframeBases = [
             'https://vidsrc-embed.su',
-            'https://vidsrc.in'
+            'https://vidsrc.in',
+			'https://www.vidking.net'
         ];
         
         currentIframeUrls = iframeBases.map(base => {
