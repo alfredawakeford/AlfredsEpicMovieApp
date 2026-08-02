@@ -16,6 +16,11 @@ let currentFilter = "all"; // 'all', 'movie', or 'tv'
 let lastSearchResults = [];
 let loading = false;
 
+function escapeForInlineJS(str) {
+    if (typeof str !== 'string') return str;
+    return JSON.stringify(str).replace(/"/g, '&quot;');
+}
+
 // New Additions State
 const tabState = {
   home: { page: 1, loading: false, seenIds: new Set() },
@@ -1335,7 +1340,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
     if (item.media_type === "movie") {
       if (isInWatched) {
         actionButtonsHTML = `
-          <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
+          <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/movie/${item.id}', ${escapeForInlineJS(title + ' (' + year + ')')}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}')">
             ▶ Play Movie
           </button>
           <div style="display: flex; flex-direction: column; align-items: center; gap: 15px; margin-top: 15px;">
@@ -1354,7 +1359,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
         `;
       } else {
         actionButtonsHTML = `
-          <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/movie/${item.id}', '${title.replace(/'/g, "\\'")} (${year})', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
+          <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/movie/${item.id}', ${escapeForInlineJS(title + ' (' + year + ')')}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}')">
             ▶ Play Movie
           </button>
           <div style="position: relative; display: inline-block;">
@@ -1380,7 +1385,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
               </button>
             </div>
             <div style="position: relative; display: inline-block;">
-              <button class= "action-btn " onclick= "showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${title.replace(/'/g,  "\\' ")}', '${data.poster_path || ''}') " >
+              <button class= "action-btn " onclick= "showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${escapeForInlineJS(title)}', '${data.poster_path || ''}') " >
                + Add to Collection
               </button >
               <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
@@ -1390,11 +1395,11 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
           `;
         } else {
           actionButtonsHTML = `
-            <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${currentSeason}/${currentEpisode}', '${title} - S${currentSeason}E${currentEpisode}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${currentSeason}, ${currentEpisode})">
+            <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${currentSeason}/${currentEpisode}', ${escapeForInlineJS(title + ' - S' + currentSeason + 'E' + currentEpisode)}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}', ${currentSeason}, ${currentEpisode})">
               ▶ Play Season ${currentSeason} Episode ${currentEpisode}
             </button>
             <div class="tv-action-group">
-              <button class="episode-done-btn" onclick="markEpisodeDone(${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', ${currentSeason}, ${currentEpisode})">
+              <button class="episode-done-btn" onclick="markEpisodeDone(${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, ${currentSeason}, ${currentEpisode})">
                 ✓ I watched this Episode
               </button>
               <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
@@ -1402,7 +1407,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
               </button>
             </div>
             <div style="position: relative; display: inline-block;">
-              <button class= "action-btn " onclick= "showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${title.replace(/'/g,  "\\' ")}', '${data.poster_path || ''}') " >
+              <button class= "action-btn " onclick= "showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${escapeForInlineJS(title)}', '${data.poster_path || ''}') " >
                + Add to Collection
               </button >
               <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
@@ -1413,7 +1418,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
         }
       } else {
         actionButtonsHTML = `
-          <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/1/1', '${title} - S1E1', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', 1, 1)">
+          <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/1/1', ${escapeForInlineJS(title + ' - S1E1')}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}', 1, 1)">
             ▶ Play Season 1 Episode 1
           </button>
           <div style="position: relative; display: inline-block;">
@@ -1492,7 +1497,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
         if (trailerUrl) {
           const safeTitle = (data.title || data.name || 'Trailer').replace(/'/g, "\\'");
           trailerBtnContainer.innerHTML = `
-            <button class="trailer-btn" onclick="openTrailer('${trailerUrl}', '${safeTitle} - Trailer')">
+            <button class="trailer-btn" onclick="openTrailer('${trailerUrl}', ${escapeForInlineJS(safeTitle)})">
               🎬 Play Trailer
             </button>
           `;
@@ -1525,7 +1530,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
                 
                 episodesContainer.innerHTML = seasonData.episodes.map(ep => {
                   const epTitle = (ep.name || 'Episode ' + ep.episode_number).replace(/'/g, "\\'");
-                  const videoTitle = `${title} - S${seasonNum}E${ep.episode_number}: ${ep.name}`.replace(/'/g, "\\'");
+                  const videoTitle = `${title} - S${seasonNum}E${ep.episode_number}: ${ep.name}`;
                   const isCurrentEpisode = currentSeason == seasonNum && currentEpisode == ep.episode_number;
                   const episodeNumberDisplay = seasonNum == 0 ? '' : `<span class="episode-number">E${ep.episode_number}</span>`;
                   
@@ -1535,7 +1540,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
                   const playBtnHTML = isUnreleased 
                     ? `<span class="episode-play disabled" title="Not released yet" style="background:#555;cursor:not-allowed">⏳</span>`
                     : `<button class="episode-play" title="Play episode"
-                       onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${seasonNum}/${ep.episode_number}', '${videoTitle}', ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}', ${seasonNum}, ${ep.episode_number})">
+                       onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${seasonNum}/${ep.episode_number}', ${escapeForInlineJS(videoTitle)}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}', ${seasonNum}, ${ep.episode_number})"
                        ▶
                        </button>`;
                   
@@ -1746,11 +1751,11 @@ function updateModalUI(id, mediaType, title, nextSeason, nextEpisode) {
   
   if (modalActions) {
     modalActions.innerHTML = `
-      <button class="play-btn" id="tempPlayBtn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${id}/${nextSeason}/${nextEpisode}', '${title.replace(/'/g, "\\'")} - S${nextSeason}E${nextEpisode}', ${id}, '${mediaType}', '${title.replace(/'/g, "\\'")}', '${posterPath}', ${nextSeason}, ${nextEpisode})">
+      <button class="play-btn" id="tempPlayBtn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${id}/${nextSeason}/${nextEpisode}', ${escapeForInlineJS(title + ' - S' + nextSeason + 'E' + nextEpisode)}, ${id}, '${mediaType}', ${escapeForInlineJS(title)}, '${posterPath}', ${nextSeason}, ${nextEpisode})">
         ▶ Play Season ${nextSeason} Episode ${nextEpisode}
       </button>
       <div class="tv-action-group">
-        <button class="episode-done-btn" onclick="markEpisodeDone(${id}, '${mediaType}', '${title.replace(/'/g, "\\'")}', ${nextSeason}, ${nextEpisode})">
+        <button class="episode-done-btn" onclick="markEpisodeDone(${id}, '${mediaType}', ${escapeForInlineJS(title)}, ${nextSeason}, ${nextEpisode})">
           ✓ I watched this Episode
         </button>
         <button class="watched-btn" onclick="removeFromContinueWatching(${id}, '${mediaType}')">
@@ -1808,11 +1813,11 @@ function updateModalToUnwatchedState(id, title) {
   const modalActions = document.querySelector('.modal-actions');
   if (modalActions) {
     modalActions.innerHTML = `
-      <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${id}/1/1', '${title.replace(/'/g, "\\'")} - S1E1', ${id}, 'tv', '${title.replace(/'/g, "\\'")}', '${posterPath}', 1, 1)">
+      <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${id}/1/1', ${escapeForInlineJS(title + ' - S1E1')}, ${id}, 'tv', ${escapeForInlineJS(title)}, '${posterPath}', 1, 1)">
         ▶ Play Season 1 Episode 1
       </button>
       <div style="position: relative; display: inline-block;">
-        <button class="action-btn" onclick="showCollectionDropdown(this, ${id}, 'tv', '${title.replace(/'/g, "\\'")}', '${posterPath}')">
+        <button class="action-btn" onclick="showCollectionDropdown(this, ${id}, 'tv', '${escapeForInlineJS(title)}', '${posterPath}')">
           + Add to Collection
         </button>
         <div id="collection-dropdown-${id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
@@ -2096,8 +2101,8 @@ function showCollectionDropdown(button, id, mediaType, title, posterPath) {
     const inCollection = isInCollection(collection.id, { id, media_type: mediaType });
     const checkmark = inCollection ? '✓ ' : '';
     optionsHTML += `
-      <div onclick="addToCollectionFromDropdown('${collection.id}', ${id}, '${mediaType}', '${title.replace(/'/g, "\\'")}', '${posterPath}', '${collection.name}')" 
-           style="padding: 10px 15px; cursor: pointer; border-bottom: 1px solid #444; display: flex; justify-content: space-between; align-items: center;">
+      <div onclick="addToCollectionFromDropdown('${collection.id}', ${id}, '${mediaType}', ${escapeForInlineJS(title)}, '${posterPath}', ${escapeForInlineJS(collection.name)})"
+			style="padding: 10px 15px; cursor: pointer; border-bottom: 1px solid #444; d
         <span>${checkmark}${collection.name}</span>
         ${inCollection ? '<span style="color: #28a745; font-size: 12px;">Added</span>' : ''}
       </div>
@@ -2434,13 +2439,13 @@ async function importCollectionFromString(csvString) {
                 saveCollectionItems(folderId, parsedItems);
                 folderDisplaySettings.set(folderId, { showName: showNameStr === 'T', showCount: showCountStr === 'T' });
 
-                const folderHTML = `
-                    <div class="collection-folder custom-folder" id="${folderId}" onclick="openCustomCollection('${folderId}', '${name.replace(/'/g, "\\'")}')">
-                        <div class="folder-icon" style="font-size: ${iconSize}px;">${iconType === 'Text' ? iconInfo : `<img src="${iconInfo}" alt="icon" style="width: ${iconSize}px; height: ${iconSize}px; object-fit: contain;">`}</div>
-                        <div class="folder-name">${name}</div>
-                        <div class="folder-count">${parsedItems.length} item${parsedItems.length !== 1 ? 's' : ''}</div>
-                    </div>
-                `;
+				const folderHTML = `
+					<div class="collection-folder custom-folder" id="${folderId}" onclick="openCustomCollection('${folderId}', ${escapeForInlineJS(name)})">
+						<div class="folder-icon" style="font-size: ${iconSize}px;">${iconType === 'Text' ? iconInfo : `<img src="${iconInfo}" alt="icon" style="width: ${iconSize}px; height: ${iconSize}px; object-fit: contain;">`}</div>
+						<div class="folder-name">${name}</div>
+						<div class="folder-count">${parsedItems.length} item${parsedItems.length !== 1 ? 's' : ''}</div>
+					</div>
+				`;
                 document.getElementById('add-folder-btn').insertAdjacentHTML('beforebegin', folderHTML);
             }
             successCount++;
@@ -2479,8 +2484,8 @@ document.getElementById('add-folder-btn').onclick = (e) => {
     if (name && name.trim() !== "") {
         const folderId = 'folder-' + Date.now();
         const folderName = name.trim();
-        const folderHTML = `<div class="collection-folder custom-folder" id="${folderId}" onclick="openCustomCollection('${folderId}', '${folderName.replace(/'/g, "\\'")}')"> <div class="folder-icon" style="font-size: 100px;">📁</div> <div class="folder-name">${folderName}</div> <div class="folder-count">0 items</div> </div>`;
-        document.getElementById('add-folder-btn').insertAdjacentHTML('beforebegin', folderHTML);
+		const folderHTML = `<div class="collection-folder custom-folder" id="${folderId}" onclick="openCustomCollection('${folderId}', ${escapeForInlineJS(folderName)})"> <div class="folder-icon" style="font-size: 100px;">📁</div> <div class="folder-name">${folderName}</div> <div class="folder-count">0 items</div> </div>`;        
+		document.getElementById('add-folder-btn').insertAdjacentHTML('beforebegin', folderHTML);
         
         const slider = document.getElementById('iconSizeSlider');
         if (slider) {
@@ -3349,12 +3354,12 @@ async function loadCollectionsState() {
                 });
                 
                 const folderHTML = `
-                    <div class="collection-folder custom-folder" id="${folderId}" onclick="openCustomCollection('${folderId}', '${name.replace(/'/g, "\\'")}')">
-                        <div class="folder-icon" style="font-size: ${iconSizeStr}px;">${iconType === 'Text' ? iconInfo : `<img src="${iconInfo}" alt="icon" style="width: ${iconSizeStr}px; height: ${iconSizeStr}px; object-fit: contain;">`}</div>
-                        <div class="folder-name">${name}</div>
-                        <div class="folder-count">${parsedItems.length} item${parsedItems.length !== 1 ? 's' : ''}</div>
-                    </div>
-                `;
+					<div class="collection-folder custom-folder" id="${folderId}" onclick="openCustomCollection('${folderId}', ${escapeForInlineJS(name)})">
+						<div class="folder-icon" style="font-size: ${iconSizeStr}px;">${iconType === 'Text' ? iconInfo : `<img src="${iconInfo}" alt="icon" style="width: ${iconSizeStr}px; height: ${iconSizeStr}px; object-fit: contain;">`}</div>
+						<div class="folder-name">${name}</div>
+						<div class="folder-count">${parsedItems.length} item${parsedItems.length !== 1 ? 's' : ''}</div>
+					</div>
+					`;
                 document.getElementById('add-folder-btn').insertAdjacentHTML('beforebegin', folderHTML);
             }
         }
