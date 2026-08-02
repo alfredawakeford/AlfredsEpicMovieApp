@@ -35,6 +35,7 @@ let currentVideoState = {
 };
 let expectedHash = null;
 let currentPlaybackLinks = [];
+let currentIframeUrls = [];
 let currentLinkIndex = 0;
 
 // Search Mode State
@@ -505,41 +506,146 @@ function renderVideoPlayer(src, id, mediaType, season, episode, subtitleUrl, aut
   }
   
   // Fallback button if the first link fails
-  if (currentPlaybackLinks.length > 1 && currentLinkIndex < currentPlaybackLinks.length - 1) {
-    const btn = document.createElement('button');
-    btn.className = 'fallback-link-btn';
-    btn.textContent = '⚠️ This is not loading';
-    btn.onclick = () => {
-      currentLinkIndex++;
-      renderVideoPlayer(currentPlaybackLinks[currentLinkIndex], id, mediaType, season, episode, subtitleUrl, true);
-    };
-    container.appendChild(btn);
+  if (currentPlaybackLinks.length > 1) {
+    const btnContainer = document.createElement('div');
+    btnContainer.style.cssText = 'position: absolute; bottom: -45px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 100;';
+    
+	const sourceLabels = ['High Definition', 'Standard Definition']; 
+	
+    currentPlaybackLinks.forEach((link, index) => {
+      const btn = document.createElement('button');
+      const isActive = index === currentLinkIndex;
+            
+      btn.textContent = sourceLabels[index] || `Source ${index + 1}`;
+      btn.style.cssText = `
+        padding: 8px 16px;
+        background: ${isActive ? '#28a745' : '#dc3545'};
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        white-space: nowrap;
+        transition: background 0.2s;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      `;
+            
+      // Hover effects for inactive buttons
+      btn.onmouseover = () => { if (!isActive) btn.style.background = '#b02a37'; };
+      btn.onmouseout = () => { if (!isActive) btn.style.background = '#dc3545'; };
+            
+      btn.onclick = () => {
+        if (!isActive) {
+          currentLinkIndex = index;
+          // Reload the player with the new source and auto-resume the timestamp
+          renderVideoPlayer(currentPlaybackLinks[currentLinkIndex], id, mediaType, season, episode, subtitleUrl, true);
+        }
+      };
+      btnContainer.appendChild(btn);
+    });
+        
+    container.appendChild(btnContainer);
   }
 }
 
 /** Determines whether to use a direct MP4 link or an iframe fallback for playback */
 function setVideoSource(id, mediaType, season, episode, fallbackUrl, autoResume = true) {
-  const container = document.querySelector(".video-container");
-  if (!container) return;
-  container.innerHTML = '';
-  
-  const linkData = (mediaType === 'tv' && season !== null && episode !== null)
-    ? getTvAlternateLink(id, season, episode)
-    : getAlternateLink(id);
+    const container = document.querySelector(".video-container");
+    if (!container) return;
+    container.innerHTML = ''; // Clear existing content
+
+    const linkData = (mediaType === 'tv' && season !== null && episode !== null)
+        ? getTvAlternateLink(id, season, episode)
+        : getAlternateLink(id);
+
+    if (linkData && linkData.videos.length > 0 && linkData.videos[0].toLowerCase().endsWith('.mp4')) {
+        currentPlaybackLinks = linkData.videos;
+        currentIframeUrls = []; // Clear iframe urls
+        currentLinkIndex = 0;
+        renderVideoPlayer(linkData.videos[0], id, mediaType, season, episode, linkData.subtitle, autoResume);
+    } else {
+        currentPlaybackLinks = []; // Clear MP4 links
+        
+        // ✅ NEW: Generate multiple iframe fallback URLs
+        const iframeBases = [
+            'https://vidsrc-embed.su',
+            'https://vidsrc.in'
+        ];
+        
+        currentIframeUrls = iframeBases.map(base => {
+            if (mediaType === 'tv' && season !== null && episode !== null) {
+                return `${base}/embed/tv/${id}/${season}/${episode}`;
+            } else {
+                return `${base}/embed/movie/${id}`;
+            }
+        });
+        
+        currentLinkIndex = 0;
+        renderIframePlayer(currentIframeUrls[0]);
+    }
+}
+
+/** ✅ NEW: Renders the iframe player with source selection buttons */
+function renderIframePlayer(src) {
+    const container = document.querySelector(".video-container");
+    if (!container) return;
     
-  if (linkData && linkData.videos.length > 0 && linkData.videos[0].toLowerCase().endsWith('.mp4')) {
-    currentPlaybackLinks = linkData.videos;
-    currentLinkIndex = 0;
-    renderVideoPlayer(linkData.videos[0], id, mediaType, season, episode, linkData.subtitle, autoResume);
-  } else {
-    currentPlaybackLinks = [];
-    const iframe = document.createElement('iframe');
-    iframe.id = 'videoFrame';
-    iframe.allowFullscreen = true;
-    iframe.src = fallbackUrl;
-    iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;';
-    container.appendChild(iframe);
-  }
+    // Create or update iframe
+    let iframe = document.getElementById('videoFrame');
+    if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'videoFrame';
+        iframe.allowFullscreen = true;
+        iframe.allow = "autoplay; encrypted-media; picture-in-picture";
+        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;background:#000;';
+        container.appendChild(iframe);
+    }
+    iframe.src = src;
+
+    // Remove existing source buttons if any
+    const existingBtns = container.querySelector('.iframe-source-btns');
+    if (existingBtns) existingBtns.remove();
+
+    // Add source buttons if there are multiple
+    if (currentIframeUrls.length > 1) {
+        const btnContainer = document.createElement('div');
+        btnContainer.className = 'iframe-source-btns';
+        btnContainer.style.cssText = 'position: absolute; bottom: -45px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 100;';
+        
+        currentIframeUrls.forEach((url, index) => {
+            const btn = document.createElement('button');
+            const isActive = index === currentLinkIndex;
+            
+            btn.textContent = `Source ${index + 1}`;
+            btn.style.cssText = `
+                padding: 8px 16px;
+                background: ${isActive ? '#28a745' : '#dc3545'};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 500;
+                white-space: nowrap;
+                transition: background 0.2s;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            `;
+            
+            btn.onmouseover = () => { if (!isActive) btn.style.background = '#b02a37'; };
+            btn.onmouseout = () => { if (!isActive) btn.style.background = '#dc3545'; };
+            
+            btn.onclick = () => {
+                if (!isActive) {
+                    currentLinkIndex = index;
+                    renderIframePlayer(currentIframeUrls[index]);
+                }
+            };
+            btnContainer.appendChild(btn);
+        });
+        
+        container.appendChild(btnContainer);
+    }
 }
 
 /** Sets up Previous/Next episode navigation buttons for TV shows */
@@ -656,24 +762,7 @@ async function navigateEpisode(direction) {
     console.warn('Failed to update hash:', err);
   }
   
-  const container = document.querySelector(".video-container");
-  container.innerHTML = '';
-  const linkData = getTvAlternateLink(id, s, e);
-  const defaultSrc = `https://vidsrc-embed.su/embed/tv/${id}/${s}/${e}`;
-  
-  if (linkData && linkData.videos.length > 0 && linkData.videos[0].toLowerCase().endsWith('.mp4')) {
-    currentPlaybackLinks = linkData.videos;
-    currentLinkIndex = 0;
-    renderVideoPlayer(linkData.videos[0], id, currentVideoState.mediaType, s, e, linkData.subtitle, false);
-  } else {
-    currentPlaybackLinks = [];
-    const iframe = document.createElement('iframe');
-    iframe.id = 'videoFrame';
-    iframe.allowFullscreen = true;
-    iframe.src = defaultSrc;
-    iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;';
-    container.appendChild(iframe);
-  }
+  setVideoSource(id, currentVideoState.mediaType, s, e, null, false);
   
   const titleEl = document.getElementById("videoTitle");
   const epTag = s === 0 ? `Extra ${e}` : `S${s}E${e}`;
