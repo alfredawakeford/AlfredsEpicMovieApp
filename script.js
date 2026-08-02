@@ -33,6 +33,7 @@ let currentVideoState = {
   id: null, mediaType: null, season: null, episode: null,
   itemTitle: null, totalEpisodesInSeason: 0, totalSeasons: 0
 };
+let expectedHash = null;
 let currentPlaybackLinks = [];
 let currentLinkIndex = 0;
 
@@ -648,6 +649,13 @@ async function navigateEpisode(direction) {
     displayContinueWatching();
   }
   
+  try {
+    expectedHash = `#/tv${id}/${s}/${e}`;
+    window.location.hash = expectedHash;
+  } catch (err) {
+    console.warn('Failed to update hash:', err);
+  }
+  
   const container = document.querySelector(".video-container");
   container.innerHTML = '';
   const linkData = getTvAlternateLink(id, s, e);
@@ -757,6 +765,9 @@ function updateButtonStates() {
 
 /** Closes the video modal, saves final progress, and cleans up the DOM */
 function closeVideoModal() {
+  history.replaceState(null, document.title, window.location.pathname + window.location.search);
+  expectedHash = null; // ✅ NEW: Reset expected hash to prevent interference
+
   const modal = document.getElementById("videoModal");
   const container = document.querySelector(".video-container");
   const videoEl = document.getElementById("videoPlayer");
@@ -790,6 +801,105 @@ function closeVideoModal() {
   if (document.getElementById("home-tab")?.classList.contains("active")) {
     displayContinueWatching();
   }
+}
+
+/**
+ * Handles deep linking via URL hash (e.g., #/movie550 or #/tv319910/1/1)
+ */
+async function handleVideoHash() {
+    const hash = window.location.hash;
+    
+    // If hash is cleared, ensure modal is closed
+    if (!hash) {
+        if (document.getElementById("videoModal")?.style.display === "block") {
+            closeVideoModal();
+        }
+        return;
+    }
+
+    // Close existing modal if open to reset state cleanly before opening new one
+    if (document.getElementById("videoModal")?.style.display === "block") {
+        closeVideoModal();
+    }
+
+    // Match Movie: #/movie123
+    const movieMatch = hash.match(/^#\/movie(\d+)$/);
+    if (movieMatch) {
+        const id = movieMatch[1];
+        try {
+            const res = await fetch(`https://api.themoviedb.org/3/movie/${id}?api_key=${apiKey}&language=en-US`);
+            if (!res.ok) throw new Error('Not found');
+            const data = await res.json();
+            
+            openVideoPlayer(
+                `https://vidsrc-embed.su/embed/movie/${id}`,
+                `${data.title} (${data.release_date?.split('-')[0]})`,
+                id,
+                'movie',
+                data.title,
+                data.poster_path
+            );
+        } catch (e) {
+            console.error("Failed to load movie from hash", e);
+            history.replaceState(null, document.title, window.location.pathname + window.location.search);
+            alert("This movie does not exist.");
+        }
+        return;
+    }
+
+    // Match TV: #/tv123/1/2
+    const tvMatch = hash.match(/^#\/tv(\d+)\/(\d+)\/(\d+)$/);
+    if (tvMatch) {
+        const id = tvMatch[1];
+        const season = parseInt(tvMatch[2], 10);
+        const episode = parseInt(tvMatch[3], 10);
+        
+        try {
+            // 1. Fetch Show Data (Validates the show exists)
+            const showRes = await fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${apiKey}&language=en-US`);
+            if (!showRes.ok) throw new Error('Show not found');
+            const showData = await showRes.json();
+
+            // 2. Fetch Season Data (Validates the season exists)
+            const seasonRes = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=en-US`);
+            if (!seasonRes.ok) throw new Error('Season not found');
+            const seasonData = await seasonRes.json();
+
+            // 3. Validate the episode exists within that season
+            const ep = seasonData.episodes?.find(e => e.episode_number === episode);
+            if (!ep) throw new Error('Episode not found');
+
+            // If we get here, everything is valid!
+            const epTitle = `S${season}E${episode}: ${ep.name}`;
+
+            openVideoPlayer(
+                `https://vidsrc-embed.su/embed/tv/${id}/${season}/${episode}`,
+                `${showData.name} - ${epTitle}`,
+                id,
+                'tv',
+                showData.name,
+                showData.poster_path,
+                season,
+                episode
+            );
+        } catch (e) {
+            console.error("Failed to load TV from hash", e);
+            // Cleanly remove the invalid hash from the URL
+            history.replaceState(null, document.title, window.location.pathname + window.location.search);
+            
+            // Show specific message based on what failed
+            if (e.message === 'Show not found') {
+                alert("This show does not exist.");
+            } else {
+                alert("This Season/Episode does not exist.");
+            }
+        }
+        return;
+    }
+
+    // Fallback: If the hash doesn't match movie or tv formats (e.g. contains letters)
+    console.warn("Invalid hash format:", hash);
+    history.replaceState(null, document.title, window.location.pathname + window.location.search);
 }
 
 
@@ -1869,6 +1979,17 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
   const titleEl = document.getElementById("videoTitle");
   if (!modal) return;
   
+  const cleanMediaType = mediaType.trim();
+  if (cleanMediaType === 'movie') {
+    expectedHash = `#/movie${id}`;
+  } else if (cleanMediaType === 'tv') {
+    expectedHash = `#/tv${id}/${season}/${episode}`;
+  }
+    
+  if (expectedHash) {
+    window.location.hash = expectedHash;
+  }
+	
   const watchlistItem = { id, media_type: mediaType, title: itemTitle, poster_path: posterPath };
   removeFromWatchlist(watchlistItem);
   addToWatched({ id, media_type: mediaType, title: itemTitle, poster_path: posterPath }, season, episode);
@@ -3402,6 +3523,23 @@ document.getElementById("cancelDataEditBtn")?.addEventListener("click", () => {
 document.addEventListener("DOMContentLoaded", () => {
   loadCollectionsState();
   renderPinnedCollections('all');
+  
+    
+  // ✅ NEW: Handle deep linking on initial page load
+  handleVideoHash();
+    
+  // ✅ NEW: Handle browser back/forward buttons or manual URL changes
+  window.addEventListener('hashchange', () => {
+    // If the hash change matches what we just set programmatically, ignore it
+    if (expectedHash && window.location.hash === expectedHash) {
+      expectedHash = null; // Consume the expected change
+      return;
+    }
+    expectedHash = null; // Reset just in case
+    handleVideoHash();
+});
+
+  
   // Initialize tabs
   ['home', 'movies', 'tv'].forEach(tab => {
     loadNewAdditions(tab, false);
