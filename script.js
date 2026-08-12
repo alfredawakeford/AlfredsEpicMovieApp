@@ -57,6 +57,7 @@ let externalLinksMap = new Map();   // Maps TMDB ID to external streaming servic
 let alternateLinks = new Map();     // Maps TMDB ID to direct MP4 video links (Movies)
 let tvAlternateLinks = new Map();   // Maps "ID_Season_Episode" to direct MP4 links (TV)
 let trailerCache = new Map();       // Caches trailer URLs to reduce API calls
+let tvEpisodeCustoms = new Map(); // Maps "TMDB_Season_OrigEp" to { name, date }
 
 // Configuration for External Streaming Service Logos/Colors
 const externalServices = [
@@ -75,6 +76,89 @@ const externalServices = [
 // ============================================================================
 // 2. DATA LOADING & CSV PARSING
 // ============================================================================
+
+/** Loads custom episode names, dates, removals, and additions from tvcustom.csv */
+async function loadTvEpisodeCustoms() {
+  try {
+    const response = await fetch('tvcustom.csv');
+    if (!response.ok) return;
+    const csvText = await response.text();
+    csvText.trim().split('\n').forEach((line, index) => {
+      if (index === 0) return; // Skip header
+      const parts = line.split(',').map(s => s.trim());
+      if (parts.length >= 3) {
+        const [id, season, episode, name, date] = parts;
+        if (id && season && episode) {
+          const key = `${id}_${season}_${episode}`;
+          tvEpisodeCustoms.set(key, {
+            name: name || '',
+            date: date || ''
+          });
+        }
+      }
+    });
+    console.log(`✅ Loaded custom episodes for ${tvEpisodeCustoms.size} entries`);
+  } catch (e) {
+    console.warn('tvcustom.csv load failed:', e);
+  }
+}
+
+/** Applies customizations (removals, edits, additions) and renumbers episodes */
+function applyEpisodeCustoms(tmdbId, seasonNum, tmdbEpisodes) {
+    const processed = [];
+    const tmdbEpMap = new Map();
+    tmdbEpisodes.forEach(ep => tmdbEpMap.set(ep.episode_number, ep));
+
+    // 1. Process existing TMDB episodes
+    tmdbEpisodes.forEach(ep => {
+        const key = `${tmdbId}_${seasonNum}_${ep.episode_number}`;
+        const custom = tvEpisodeCustoms.get(key);
+        
+        if (custom) {
+            // If both name and date are empty, it's a removal
+            if (!custom.name && !custom.date) return; // Skip (remove)
+            
+            const newEp = { ...ep };
+            if (custom.name) newEp.name = custom.name;
+            if (custom.date) newEp.air_date = custom.date;
+            newEp.original_episode_number = ep.episode_number;
+            processed.push(newEp);
+        } else {
+            const newEp = { ...ep };
+            newEp.original_episode_number = ep.episode_number;
+            processed.push(newEp);
+        }
+    });
+
+    // 2. Process additions (custom entries that don't match any TMDB episode)
+    tvEpisodeCustoms.forEach((val, key) => {
+        const parts = key.split('_');
+        if (parts.length === 3 && parts[0] === String(tmdbId) && parts[1] === String(seasonNum)) {
+            const origEp = parseInt(parts[2], 10);
+            if (!tmdbEpMap.has(origEp)) {
+                if (val.name || val.date) {
+                    processed.push({
+                        episode_number: origEp,
+                        name: val.name || `Episode ${origEp}`,
+                        air_date: val.date || '',
+                        original_episode_number: origEp,
+                        is_addition: true
+                    });
+                }
+            }
+        }
+    });
+
+    // Sort by original episode number to maintain correct order
+    processed.sort((a, b) => a.original_episode_number - b.original_episode_number);
+
+    // 3. Renumber to new episode numbers (1 to N)
+    processed.forEach((ep, index) => {
+        ep.new_episode_number = index + 1;
+    });
+
+    return processed;
+}
 
 /** Loads direct MP4 links and external service links for movies from movielinks.csv */
 async function loadAlternateLinks() {
@@ -271,6 +355,33 @@ function formatTime(seconds) {
   return h > 0
     ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
     : `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Fetches a cross-origin subtitle file via a CORS proxy and converts it 
+ * to a local Blob URL. This completely bypasses browser <track> CORS restrictions.
+ */
+async function getSubtitleBlobUrl(subtitleUrl) {
+  try {
+    // 1. Decode first to prevent double-encoding issues (e.g., %2520 becoming a literal space)
+    const decodedUrl = decodeURIComponent(subtitleUrl);
+        
+    // 2. Fetch via a reliable CORS proxy
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(decodedUrl)}`;
+    const response = await fetch(proxyUrl);
+        
+    if (!response.ok) throw new Error(`Proxy failed with status ${response.status}`);
+        
+    const text = await response.text();
+        
+    // 3. Convert the fetched text into a same-origin Blob URL
+    const blob = new Blob([text], { type: 'text/vtt' });
+    return URL.createObjectURL(blob);
+  } catch (error) {
+    console.warn('Subtitle proxy fetch failed, falling back to direct URL:', error);
+    // Fallback to direct URL if the proxy fails
+    return subtitleUrl;
+  }
 }
 
 
@@ -481,29 +592,43 @@ function renderVideoPlayer(src, id, mediaType, season, episode, subtitleUrl, aut
   const container = document.querySelector(".video-container");
   if (!container) return;
   container.innerHTML = '';
-  
+
   const videoEl = document.createElement('video');
   videoEl.id = 'videoPlayer';
   videoEl.src = src;
   videoEl.controls = true;
   videoEl.autoplay = true;
+    
+  // ✅ FIX 1: REMOVED crossOrigin. Browsers don't require CORS to simply *play* a video. 
+  // Setting it forces strict checking, which Archive.org's redirect servers sometimes fail.
   videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
-  container.appendChild(videoEl);
-  
-  attachDebugTimeline(videoEl, id, mediaType, season, episode, autoResume);
-  
+
   if (subtitleUrl) {
     const track = document.createElement('track');
     track.kind = 'subtitles';
     track.label = 'English';
     track.srclang = 'en';
-    track.src = subtitleUrl;
-    track.default = true;
+    track.default = false;
+        
+    // Asynchronously fetch the subtitle and set it as a same-origin Blob URL
+    getSubtitleBlobUrl(subtitleUrl).then(blobUrl => {
+      track.src = blobUrl;
+    });
+        
     videoEl.appendChild(track);
+        
+    // Force the track to show once the video data is loaded
     videoEl.addEventListener('loadeddata', () => {
-      if (videoEl.textTracks.length > 0) videoEl.textTracks[0].mode = 'showing';
+      if (videoEl.textTracks.length > 0) {
+        videoEl.textTracks[0].mode = 'hidden';
+      }
     });
   }
+
+  // Append to DOM *after* the track is added
+  container.appendChild(videoEl);
+  attachDebugTimeline(videoEl, id, mediaType, season, episode, autoResume);
+
   
   // Fallback button if the first link fails
   if (currentPlaybackLinks.length > 1) {
@@ -700,13 +825,15 @@ async function setupVideoControls(id, mediaType, season, episode, itemTitle) {
     ]);
     const sData = await seasonRes.json();
     const shData = await showRes.json();
-    currentVideoState.totalEpisodesInSeason = sData.episodes?.length || 0;
+    
+    // Apply customizations to get the true episode count
+    const customEps = applyEpisodeCustoms(id, season, sData.episodes || []);
+    currentVideoState.totalEpisodesInSeason = customEps.length;
     currentVideoState.totalSeasons = shData.seasons?.filter(s => s.season_number > 0).length || 0;
-    currentVideoState.episodes = sData.episodes || [];
-  } catch (e) { 
-    console.error("Control limits fetch failed:", e); 
+    currentVideoState.episodes = customEps;
+  } catch (e) {
+    console.error("Control limits fetch failed:", e);
   }
-  updateButtonStates();
 }
 
 /** Handles navigating to the previous or next episode, fetching new data as needed */
@@ -808,7 +935,7 @@ function updateButtonStates() {
       }
       
       if (nextS === currentVideoState.season) {
-        const epData = currentVideoState.episodes?.find(ep => ep.episode_number === nextE);
+        const epData = currentVideoState.episodes?.find(ep => ep.new_episode_number === nextE);
         if (epData?.air_date) {
           const airDate = new Date(epData.air_date);
           const today = new Date(); today.setHours(0,0,0,0);
@@ -1486,297 +1613,282 @@ function renderExternalButtons(tmdbId, modalBody) {
 }
 
 async function showMovieDetails(item, fromContinueWatching = false, personRoleData = null) {
-  const modal = document.getElementById("movieModal");
-  const modalBody = document.getElementById("modalBody");
-  if (!modal || !modalBody) return;
-  
-  modalBody.innerHTML = "<p>Loading...</p>";
-  modal.style.display = "block";
-  
-  try {
-    const endpoint = item.media_type === "movie" ? "movie" : "tv";
-    const res = await fetch(`https://api.themoviedb.org/3/${endpoint}/${item.id}?api_key=${apiKey}&language=en-US`);
-    const data = await res.json();
-    
-    const title = data.title || data.name;
-    const type = item.media_type === "movie" ? "Movie" : "TV Show";
-    const releaseDate = data.release_date || data.first_air_date || "N/A";
-    const year = releaseDate.split("-")[0];
-    const rating = data.vote_average ? data.vote_average.toFixed(1) + "/10" : "N/A";
-    const runtime = item.media_type === "movie" && data.runtime ? data.runtime + " min" :
-                    item.media_type === "tv" && data.episode_run_time?.[0] ? data.episode_run_time[0] + " min/ep" : "N/A";
-    const genres = data.genres?.map(g => g.name).join(", ") || "N/A";
-
-    let roleHTML = '';
-    if (personRoleData) {
-      const { roles, personName } = personRoleData;
-      const isPlural = roles.includes(',') || roles === 'Multiple';
-      roleHTML = `<div class="modal-info"><strong>${personName}'s ${isPlural ? 'roles' : 'role'} in ${title} ${isPlural ? 'are' : 'is'}:</strong> ${roles}</div>`;
-    }
-
-    const watched = getWatchedData();
-    const key = `${item.media_type}_${item.id}`;
-    const tracked = watched[key];
-    const currentSeason = tracked?.currentSeason || null;
-    const currentEpisode = tracked?.currentEpisode || null;
-    const isInWatched = tracked !== undefined;
-
-    let isCurrentUnreleased = false;
-    if (item.media_type === "tv" && currentSeason !== null && currentEpisode !== null) {
-      try {
-        const seasonRes = await fetch(`https://api.themoviedb.org/3/tv/${item.id}/season/${currentSeason}?api_key=${apiKey}&language=en-US`);
-        const sData = await seasonRes.json();
-        const ep = sData.episodes?.find(e => e.episode_number == currentEpisode);
-        if (ep?.air_date) {
-          const airDate = new Date(ep.air_date);
-          const today = new Date(); today.setHours(0,0,0,0);
-          if (airDate > today) isCurrentUnreleased = true;
+    const modal = document.getElementById("movieModal");
+    const modalBody = document.getElementById("modalBody");
+    if (!modal || !modalBody) return;
+    modalBody.innerHTML = "<p>Loading...</p>";
+    modal.style.display = "block";
+    try {
+        const endpoint = item.media_type === "movie" ? "movie" : "tv";
+        const res = await fetch(`https://api.themoviedb.org/3/${endpoint}/${item.id}?api_key=${apiKey}&language=en-US`);
+        const data = await res.json();
+        const title = data.title || data.name;
+        const type = item.media_type === "movie" ? "Movie" : "TV Show";
+        const releaseDate = data.release_date || data.first_air_date || "N/A";
+        const year = releaseDate.split("-")[0];
+        const rating = data.vote_average ? data.vote_average.toFixed(1) + "/10" : "N/A";
+        const runtime = item.media_type === "movie" && data.runtime ? data.runtime + " min" :
+            item.media_type === "tv" && data.episode_run_time?.[0] ? data.episode_run_time[0] + " min/ep" : "N/A";
+        const genres = data.genres?.map(g => g.name).join(", ") || "N/A";
+        let roleHTML = '';
+        if (personRoleData) {
+            const { roles, personName } = personRoleData;
+            const isPlural = roles.includes(',') || roles === 'Multiple';
+            roleHTML = `<div class="modal-info"><strong>${personName}'s ${isPlural ? 'roles' : 'role'} in ${title} ${isPlural ? 'are' : 'is'}:</strong> ${roles}</div>`;
         }
-      } catch(e) { console.warn("Failed to check episode release date", e); }
-    }
+        const watched = getWatchedData();
+        const key = `${item.media_type}_${item.id}`;
+        const tracked = watched[key];
+        const currentSeason = tracked?.currentSeason || null;
+        const currentEpisode = tracked?.currentEpisode || null;
+        const isInWatched = tracked !== undefined;
 
-    let actionButtonsHTML = "";
-
-    if (item.media_type === "movie") {
-      if (isInWatched) {
-        actionButtonsHTML = `
-          <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/movie/${item.id}', ${escapeForInlineJS(title + ' (' + year + ')')}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}')">
-            ▶ Play Movie
-          </button>
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 15px; margin-top: 15px;">
-            <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
-              Remove from Continue Watching
-            </button>
-            <div style="position: relative; display: inline-block;">
-            <button class= "action-btn " onclick= "showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${title.replace(/'/g,  "\\' ")}', '${data.poster_path || ''}') " >
-              + Add to Collection
-            </button >
-            <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
-              <!-- Options will be populated by JavaScript -->
-            </div>
-          </div>
-        </div>
-        `;
-      } else {
-        actionButtonsHTML = `
-          <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/movie/${item.id}', ${escapeForInlineJS(title + ' (' + year + ')')}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}')">
-            ▶ Play Movie
-          </button>
-          <div style="position: relative; display: inline-block;">
-            <button class= "action-btn " onclick= "showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${title.replace(/'/g,  "\\' ")}', '${data.poster_path || ''}') " >
-             + Add to Collection
-            </button >
-            <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
-              <!-- Options will be populated by JavaScript -->
-            </div>
-          </div>
-        `;
-      }
-    } else if (item.media_type === "tv") {
-      if (isInWatched && currentSeason && currentEpisode) {
-        if (isCurrentUnreleased) {
-          actionButtonsHTML = `
-            <button class="play-btn" disabled style="background:#555;cursor:not-allowed">
-              ⏳ Episode has not released yet
-            </button>
-            <div class="tv-action-group">
-              <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
-                Remove from Continue Watching
-              </button>
-            </div>
-            <div style="position: relative; display: inline-block;">
-              <button class= "action-btn " onclick= "showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${escapeForInlineJS(title)}', '${data.poster_path || ''}') " >
-               + Add to Collection
-              </button >
-              <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
-                <!-- Options will be populated by JavaScript -->
-              </div>
-            </div>
-          `;
-        } else {
-          actionButtonsHTML = `
-            <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${currentSeason}/${currentEpisode}', ${escapeForInlineJS(title + ' - S' + currentSeason + 'E' + currentEpisode)}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}', ${currentSeason}, ${currentEpisode})">
-              ▶ Play Season ${currentSeason} Episode ${currentEpisode}
-            </button>
-            <div class="tv-action-group">
-              <button class="episode-done-btn" onclick="markEpisodeDone(${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, ${currentSeason}, ${currentEpisode})">
-                ✓ I watched this Episode
-              </button>
-              <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
-                Remove from Continue Watching
-              </button>
-            </div>
-            <div style="position: relative; display: inline-block;">
-              <button class= "action-btn " onclick= "showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${escapeForInlineJS(title)}', '${data.poster_path || ''}') " >
-               + Add to Collection
-              </button >
-              <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
-                <!-- Options will be populated by JavaScript -->
-              </div>
-            </div>
-          `;
-        }
-      } else {
-        actionButtonsHTML = `
-          <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/1/1', ${escapeForInlineJS(title + ' - S1E1')}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}', 1, 1)">
-            ▶ Play Season 1 Episode 1
-          </button>
-          <div style="position: relative; display: inline-block;">
-            <button class= "action-btn " onclick= "showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${title.replace(/'/g,  "\\' ")}', '${data.poster_path || ''}') " >
-             + Add to Collection
-            </button >
-            <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
-              <!-- Options will be populated by JavaScript -->
-            </div>
-          </div>
-        `;
-      }
-    }
-
-    let modalHTML = `
-      ${data.poster_path ? `<img class="modal-poster" src="https://image.tmdb.org/t/p/w500${data.poster_path}" alt="${title}">` : ""}
-      <h2 class="modal-title">${title} (${year})</h2>
-      <div class="modal-info">${type} • ${rating} • ${runtime}</div>
-      <div class="modal-info"><strong>Genres:</strong> ${genres}</div>
-      ${roleHTML}
-      <p class="modal-overview">${data.overview || "No overview available."}</p>
-      <div class="modal-actions">
-        ${actionButtonsHTML}
-      </div>
-    `;
-
-    if (item.media_type === "tv" && data.seasons?.length > 0) {
-      modalHTML += `<div class="seasons-container"><h3 style="margin:15px 0 10px;">Seasons & Episodes</h3>`;
-      
-      const numberedSeasons = data.seasons.filter(s => s.season_number > 0);
-      const specialsSeason = data.seasons.find(s => s.season_number === 0);
-      
-      for (const season of numberedSeasons) {
-        const isCurrentSeason = currentSeason === season.season_number;
-        modalHTML += `
-          <button class="season-toggle ${isCurrentSeason ? 'current' : ''}" data-season="${season.season_number}">
-            ${season.name} <span style="color:#888;font-size:14px">(${season.episode_count || '?'} eps)</span>
-          </button>
-          <div class="episodes-list" id="episodes-s${season.season_number}">
-            <div class="episode-loading">Loading episodes...</div>
-          </div>
-        `;
-      }
-      
-      if (specialsSeason) {
-        const isCurrentSeason = currentSeason === 0;
-        modalHTML += `
-          <button class="season-toggle ${isCurrentSeason ? 'current' : ''}" data-season="0">
-            Extras <span style="color:#888;font-size:14px">(${specialsSeason.episode_count || '?'} Extras)</span>
-          </button>
-          <div class="episodes-list" id="episodes-s0">
-            <div class="episode-loading">Loading episodes...</div>
-          </div>
-        `;
-      }
-      modalHTML += `</div>`;
-    }
-
-    modalBody.innerHTML = modalHTML;
-    renderExternalButtons(item.id, modalBody);
-
-    // Async trailer button injection
-    (async () => {
-      try {
-        const trailerBtnContainer = document.createElement('div');
-        trailerBtnContainer.id = 'trailer-btn-container';
-        trailerBtnContainer.style.cssText = 'text-align:center;margin:15px 0;';
-        trailerBtnContainer.innerHTML = '<button class="action-btn" disabled style="opacity:0.7">🎬 Loading trailer...</button>';
-        
-        const actionsEl = modalBody.querySelector('.modal-actions');
-        if (actionsEl) actionsEl.appendChild(trailerBtnContainer);
-        else modalBody.appendChild(trailerBtnContainer);
-        
-        const trailerUrl = await fetchTrailerUrl(item.id, item.media_type);
-        
-        if (trailerUrl) {
-          const safeTitle = (data.title || data.name || 'Trailer').replace(/'/g, "\\'");
-          trailerBtnContainer.innerHTML = `
-            <button class="trailer-btn" onclick="openTrailer('${trailerUrl}', ${escapeForInlineJS(safeTitle)})">
-              🎬 Play Trailer
-            </button>
-          `;
-        } else {
-          trailerBtnContainer.innerHTML = '';
-        }
-      } catch (e) {
-        console.warn('Trailer button injection failed:', e);
-        const container = document.getElementById('trailer-btn-container');
-        if (container) container.innerHTML = '';
-      }
-    })();
-
-    // Season/Episode toggle logic
-    if (item.media_type === "tv") {
-      document.querySelectorAll('.season-toggle').forEach(btn => {
-        btn.onclick = async (e) => {
-          e.stopPropagation();
-          const seasonNum = parseInt(btn.dataset.season);
-          const episodesContainer = document.getElementById(`episodes-s${seasonNum}`);
-          const isActive = btn.classList.toggle('active');
-          
-          if (isActive && !episodesContainer.dataset.loaded) {
+        // --- MODIFICATION 1: Updated isCurrentUnreleased check using applyEpisodeCustoms ---
+        let isCurrentUnreleased = false;
+        if (item.media_type === "tv" && currentSeason !== null && currentEpisode !== null) {
             try {
-              const seasonRes = await fetch(`https://api.themoviedb.org/3/tv/${item.id}/season/${seasonNum}?api_key=${apiKey}&language=en-US`);
-              const seasonData = await seasonRes.json();
-              
-              if (seasonData.episodes?.length > 0) {
-                const today = new Date(); today.setHours(0,0,0,0);
-                
-                episodesContainer.innerHTML = seasonData.episodes.map(ep => {
-                  const epTitle = (ep.name || 'Episode ' + ep.episode_number).replace(/'/g, "\\'");
-                  const videoTitle = `${title} - S${seasonNum}E${ep.episode_number}: ${ep.name}`;
-                  const isCurrentEpisode = currentSeason == seasonNum && currentEpisode == ep.episode_number;
-                  const episodeNumberDisplay = seasonNum == 0 ? '' : `<span class="episode-number">E${ep.episode_number}</span>`;
-                  
-                  const airDate = ep.air_date ? new Date(ep.air_date) : null;
-                  const isUnreleased = airDate && airDate > today;
-                  
-                  const playBtnHTML = isUnreleased 
-                    ? `<span class="episode-play disabled" title="Not released yet" style="background:#555;cursor:not-allowed">⏳</span>`
-                    : `<button class="episode-play" title="Play episode"
-                       onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${seasonNum}/${ep.episode_number}', ${escapeForInlineJS(videoTitle)}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}', ${seasonNum}, ${ep.episode_number})"
-                       ▶
-                       </button>`;
-                  
-                  const unreleasedMsgHTML = isUnreleased 
-                    ? `<span class="episode-unreleased" style="color:#ff6b6b;font-size:12px;font-weight:600;margin:0 8px">This episode has not released yet</span>` 
-                    : '';
-                  
-                  return `
-                    <div class="episode-item ${isCurrentEpisode ? 'current' : ''} ${isUnreleased ? 'unreleased' : ''}" ${isUnreleased ? 'style="opacity:0.7"' : ''}>
-                      <div class="episode-actions">
-                        ${playBtnHTML}
-                      </div>
-                      ${episodeNumberDisplay}
-                      <span class="episode-title">${ep.name}</span>
-                      ${unreleasedMsgHTML}
-                      <span class="episode-date">${ep.air_date || 'TBA'}</span>
+                const seasonRes = await fetch(`https://api.themoviedb.org/3/tv/${item.id}/season/${currentSeason}?api_key=${apiKey}&language=en-US`);
+                const sData = await seasonRes.json();
+                const customEps = applyEpisodeCustoms(item.id, currentSeason, sData.episodes || []);
+                const ep = customEps.find(e => e.new_episode_number == currentEpisode);
+                if (ep?.air_date) {
+                    const airDate = new Date(ep.air_date);
+                    const today = new Date(); today.setHours(0,0,0,0);
+                    if (airDate > today) isCurrentUnreleased = true;
+                }
+            } catch(e) { console.warn("Failed to check episode release date", e); }
+        }
+
+        let actionButtonsHTML = "";
+        if (item.media_type === "movie") {
+            if (isInWatched) {
+                actionButtonsHTML = `
+                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/movie/${item.id}', ${escapeForInlineJS(title + ' (' + year + ')')}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}')">
+                        ▶ Play Movie
+                    </button>
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 15px; margin-top: 15px;">
+                        <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
+                            Remove from Continue Watching
+                        </button>
+                        <div style="position: relative; display: inline-block;">
+                            <button class="action-btn" onclick="showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
+                                + Add to Collection
+                            </button>
+                            <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                                <!-- Options will be populated by JavaScript -->
+                            </div>
+                        </div>
                     </div>
-                  `;
-                }).join('');
-              } else {
-                episodesContainer.innerHTML = '<div class="no-episodes">No episodes listed</div>';
-              }
-              episodesContainer.dataset.loaded = "true";
-            } catch (err) {
-              console.error("Error loading season: ", err);
-              episodesContainer.innerHTML = '<div class="no-episodes" style="color:#e50914">Failed to load episodes</div>';
+                `;
+            } else {
+                actionButtonsHTML = `
+                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/movie/${item.id}', ${escapeForInlineJS(title + ' (' + year + ')')}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}')">
+                        ▶ Play Movie
+                    </button>
+                    <div style="position: relative; display: inline-block;">
+                        <button class="action-btn" onclick="showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
+                            + Add to Collection
+                        </button>
+                        <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                            <!-- Options will be populated by JavaScript -->
+                        </div>
+                    </div>
+                `;
             }
-          }
-          episodesContainer.classList.toggle('show', isActive);
-        };
-      });
+        } else if (item.media_type === "tv") {
+            if (isInWatched && currentSeason && currentEpisode) {
+                if (isCurrentUnreleased) {
+                    actionButtonsHTML = `
+                        <button class="play-btn" disabled style="background:#555;cursor:not-allowed">
+                            ⏳ Episode has not released yet
+                        </button>
+                        <div class="tv-action-group">
+                            <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
+                                Remove from Continue Watching
+                            </button>
+                        </div>
+                        <div style="position: relative; display: inline-block;">
+                            <button class="action-btn" onclick="showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${escapeForInlineJS(title)}', '${data.poster_path || ''}')">
+                                + Add to Collection
+                            </button>
+                            <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                                <!-- Options will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    actionButtonsHTML = `
+                        <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${currentSeason}/${currentEpisode}', ${escapeForInlineJS(title + ' - S' + currentSeason + 'E' + currentEpisode)}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}', ${currentSeason}, ${currentEpisode})">
+                            ▶ Play Season ${currentSeason} Episode ${currentEpisode}
+                        </button>
+                        <div class="tv-action-group">
+                            <button class="episode-done-btn" onclick="markEpisodeDone(${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, ${currentSeason}, ${currentEpisode})">
+                                ✓ I watched this Episode
+                            </button>
+                            <button class="watched-btn" onclick="removeFromContinueWatching(${item.id}, '${item.media_type}')">
+                                Remove from Continue Watching
+                            </button>
+                        </div>
+                        <div style="position: relative; display: inline-block;">
+                            <button class="action-btn" onclick="showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${escapeForInlineJS(title)}', '${data.poster_path || ''}')">
+                                + Add to Collection
+                            </button>
+                            <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                                <!-- Options will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    `;
+                }
+            } else {
+                actionButtonsHTML = `
+                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/1/1', ${escapeForInlineJS(title + ' - S1E1')}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}', 1, 1)">
+                        ▶ Play Season 1 Episode 1
+                    </button>
+                    <div style="position: relative; display: inline-block;">
+                        <button class="action-btn" onclick="showCollectionDropdown(this, ${item.id}, '${item.media_type}', '${title.replace(/'/g, "\\'")}', '${data.poster_path || ''}')">
+                            + Add to Collection
+                        </button>
+                        <div id="collection-dropdown-${item.id}" class="collection-dropdown" style="display: none; position: absolute; top: 100%; left: 0; background: #333; border-radius: 6px; margin-top: 5px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                            <!-- Options will be populated by JavaScript -->
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        let modalHTML = `
+            ${data.poster_path ? `<img class="modal-poster" src="https://image.tmdb.org/t/p/w500${data.poster_path}" alt="${title}">` : ""}
+            <h2 class="modal-title">${title} (${year})</h2>
+            <div class="modal-info">${type} • ${rating} • ${runtime}</div>
+            <div class="modal-info"><strong>Genres:</strong> ${genres}</div>
+            ${roleHTML}
+            <p class="modal-overview">${data.overview || "No overview available."}</p>
+            <div class="modal-actions">
+                ${actionButtonsHTML}
+            </div>
+        `;
+        if (item.media_type === "tv" && data.seasons?.length > 0) {
+            modalHTML += `<div class="seasons-container"><h3 style="margin:15px 0 10px;">Seasons & Episodes</h3>`;
+            const numberedSeasons = data.seasons.filter(s => s.season_number > 0);
+            const specialsSeason = data.seasons.find(s => s.season_number === 0);
+            for (const season of numberedSeasons) {
+                const isCurrentSeason = currentSeason === season.season_number;
+                modalHTML += `
+                    <button class="season-toggle ${isCurrentSeason ? 'current' : ''}" data-season="${season.season_number}">
+                        ${season.name} <span style="color:#888;font-size:14px">(${season.episode_count || '?'} eps)</span>
+                    </button>
+                    <div class="episodes-list" id="episodes-s${season.season_number}">
+                        <div class="episode-loading">Loading episodes...</div>
+                    </div>
+                `;
+            }
+            if (specialsSeason) {
+                const isCurrentSeason = currentSeason === 0;
+                modalHTML += `
+                    <button class="season-toggle ${isCurrentSeason ? 'current' : ''}" data-season="0">
+                        Extras <span style="color:#888;font-size:14px">(${specialsSeason.episode_count || '?'} Extras)</span>
+                    </button>
+                    <div class="episodes-list" id="episodes-s0">
+                        <div class="episode-loading">Loading episodes...</div>
+                    </div>
+                `;
+            }
+            modalHTML += `</div>`;
+        }
+        modalBody.innerHTML = modalHTML;
+        renderExternalButtons(item.id, modalBody);
+        
+        // Async trailer button injection
+        (async () => {
+            try {
+                const trailerBtnContainer = document.createElement('div');
+                trailerBtnContainer.id = 'trailer-btn-container';
+                trailerBtnContainer.style.cssText = 'text-align:center;margin:15px 0;';
+                trailerBtnContainer.innerHTML = '<button class="action-btn" disabled style="opacity:0.7">🎬 Loading trailer...</button>';
+                const actionsEl = modalBody.querySelector('.modal-actions');
+                if (actionsEl) actionsEl.appendChild(trailerBtnContainer);
+                else modalBody.appendChild(trailerBtnContainer);
+                const trailerUrl = await fetchTrailerUrl(item.id, item.media_type);
+                if (trailerUrl) {
+                    const safeTitle = (data.title || data.name || 'Trailer').replace(/'/g, "\\'");
+                    trailerBtnContainer.innerHTML = `
+                        <button class="trailer-btn" onclick="openTrailer('${trailerUrl}', ${escapeForInlineJS(safeTitle)})">
+                            🎬 Play Trailer
+                        </button>
+                    `;
+                } else {
+                    trailerBtnContainer.innerHTML = '';
+                }
+            } catch (e) {
+                console.warn('Trailer button injection failed:', e);
+                const container = document.getElementById('trailer-btn-container');
+                if (container) container.innerHTML = '';
+            }
+        })();
+
+        // --- MODIFICATION 2: Updated Season/Episode toggle logic using applyEpisodeCustoms ---
+        if (item.media_type === "tv") {
+            document.querySelectorAll('.season-toggle').forEach(btn => {
+                btn.onclick = async (e) => {
+                    e.stopPropagation();
+                    const seasonNum = parseInt(btn.dataset.season);
+                    const episodesContainer = document.getElementById(`episodes-s${seasonNum}`);
+                    const isActive = btn.classList.toggle('active');
+                    if (isActive && !episodesContainer.dataset.loaded) {
+                        try {
+                            const seasonRes = await fetch(`https://api.themoviedb.org/3/tv/${item.id}/season/${seasonNum}?api_key=${apiKey}&language=en-US`);
+                            const seasonData = await seasonRes.json();
+                            
+                            // Apply customizations to get the true episode list
+                            const customEpisodes = applyEpisodeCustoms(item.id, seasonNum, seasonData.episodes || []);
+                            
+                            if (customEpisodes.length > 0) {
+                                const today = new Date(); today.setHours(0,0,0,0);
+                                episodesContainer.innerHTML = customEpisodes.map(ep => {
+                                    const epTitle = (ep.name || 'Episode ' + ep.new_episode_number).replace(/'/g, "\\'");
+                                    const videoTitle = `${title} - S${seasonNum}E${ep.new_episode_number}: ${ep.name}`;
+                                    const isCurrentEpisode = currentSeason == seasonNum && currentEpisode == ep.new_episode_number;
+                                    const episodeNumberDisplay = seasonNum == 0 ? '' : `<span class="episode-number">E${ep.new_episode_number}</span>`;
+                                    const airDate = ep.air_date ? new Date(ep.air_date) : null;
+                                    const isUnreleased = airDate && airDate > today;
+                                    
+                                    const playBtnHTML = isUnreleased
+                                        ? `<span class="episode-play disabled" title="Not released yet" style="background:#555;cursor:not-allowed">⏳</span>`
+                                        : `<button class="episode-play" title="Play episode"
+                                            onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${seasonNum}/${ep.new_episode_number}', ${escapeForInlineJS(videoTitle)}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}', ${seasonNum}, ${ep.new_episode_number})"
+                                            ▶
+                                            </button>`;
+                                    const unreleasedMsgHTML = isUnreleased
+                                        ? `<span class="episode-unreleased" style="color:#ff6b6b;font-size:12px;font-weight:600;margin:0 8px">This episode has not released yet</span>`
+                                        : '';
+                                        
+                                    return `
+                                        <div class="episode-item ${isCurrentEpisode ? 'current' : ''} ${isUnreleased ? 'unreleased' : ''}" ${isUnreleased ? 'style="opacity:0.7"' : ''}>
+                                            <div class="episode-actions">${playBtnHTML}</div>
+                                            ${episodeNumberDisplay}
+                                            <span class="episode-title">${ep.name}</span>
+                                            ${unreleasedMsgHTML}
+                                            <span class="episode-date">${ep.air_date || 'TBA'}</span>
+                                        </div>
+                                    `;
+                                }).join('');
+                            } else {
+                                episodesContainer.innerHTML = '<div class="no-episodes">No episodes listed</div>';
+                            }
+                            episodesContainer.dataset.loaded = "true";
+                        } catch (err) {
+                            console.error("Error loading season: ", err);
+                            episodesContainer.innerHTML = '<div class="no-episodes" style="color:#e50914">Failed to load episodes</div>';
+                        }
+                    }
+                    episodesContainer.classList.toggle('show', isActive);
+                };
+            });
+        }
+    } catch (error) {
+        console.error("Error fetching details: ", error);
+        modalBody.innerHTML = "<p>Failed to load details. Please try again.</p>";
     }
-  } catch (error) {
-    console.error("Error fetching details: ", error);
-    modalBody.innerHTML = "<p>Failed to load details. Please try again.</p>";
-  }
 }
 
 function openTrailer(url, title) {
@@ -1886,14 +1998,15 @@ async function markEpisodeDone(id, mediaType, title, currentSeason, currentEpiso
     const seasonRes = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${currentSeason}?api_key=${apiKey}&language=en-US`);
     if (!seasonRes.ok) throw new Error("Failed to fetch season data");
     const seasonData = await seasonRes.json();
-    const totalEpisodes = seasonData.episodes?.length || 0;
+    
+    const customEps = applyEpisodeCustoms(id, currentSeason, seasonData.episodes || []);
+    const totalEpisodes = customEps.length;
     
     if (currentEpisode >= totalEpisodes) {
       const showRes = await fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${apiKey}&language=en-US`);
       if (!showRes.ok) throw new Error("Failed to fetch show data");
       const showData = await showRes.json();
       const totalSeasons = showData.seasons?.filter(s => s.season_number > 0).length || 0;
-      
       if (currentSeason >= totalSeasons) {
         removeFromWatched(id, mediaType);
         displayContinueWatching();
@@ -1902,30 +2015,27 @@ async function markEpisodeDone(id, mediaType, title, currentSeason, currentEpiso
       }
       nextSeason = currentSeason + 1;
       nextEpisode = 1;
-      
       try {
         const nextSeasonRes = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${nextSeason}?api_key=${apiKey}&language=en-US`);
         const nextSeasonData = await nextSeasonRes.json();
-        const firstEp = nextSeasonData.episodes?.[0];
+        const nextCustomEps = applyEpisodeCustoms(id, nextSeason, nextSeasonData.episodes || []);
+        const firstEp = nextCustomEps[0];
         if (firstEp?.air_date) {
           const airDate = new Date(firstEp.air_date);
           const today = new Date(); today.setHours(0,0,0,0);
           if (airDate > today) isNextUnreleased = true;
         }
       } catch(e) { console.warn("Failed to check next season release", e); }
-      
     } else {
       nextSeason = currentSeason;
       nextEpisode = currentEpisode + 1;
-      
-      const nextEp = seasonData.episodes?.find(ep => ep.episode_number === nextEpisode);
+      const nextEp = customEps.find(ep => ep.new_episode_number === nextEpisode);
       if (nextEp?.air_date) {
         const airDate = new Date(nextEp.air_date);
         const today = new Date(); today.setHours(0,0,0,0);
         if (airDate > today) isNextUnreleased = true;
       }
     }
-
     updateTVEpisode(id, mediaType, nextSeason, nextEpisode);
   } catch (error) {
     console.error("Data save failed:", error);
@@ -3656,6 +3766,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadAlternateLinks();
   loadTvAlternateLinks();
   loadTvExternalLinks();
+  loadTvEpisodeCustoms();
   
   // Modal close handlers
   const movieModal = document.getElementById("movieModal");
