@@ -587,91 +587,45 @@ function getTvAlternateLink(id, season, episode) {
   return tvAlternateLinks.get(key) || null;
 }
 
-/** Renders a direct MP4 video player with subtitle support and fallback buttons */
+/** Renders the custom iframe video player with source, subtitle, and time parameters */
 function renderVideoPlayer(src, id, mediaType, season, episode, subtitleUrl, autoResume = true) {
-  const container = document.querySelector(".video-container");
-  if (!container) return;
-  container.innerHTML = '';
+    const container = document.querySelector(".video-container");
+    if (!container) return;
+    container.innerHTML = '';
 
-  const videoEl = document.createElement('video');
-  videoEl.id = 'videoPlayer';
-  videoEl.src = src;
-  videoEl.controls = true;
-  videoEl.autoplay = true;
+    // 1. Build the Custom Player URL
+    let playerUrl = `https://alfredawakeford.github.io/CustomVideoPlayer/?v=${encodeURIComponent(src)}`;
     
-  // ✅ FIX 1: REMOVED crossOrigin. Browsers don't require CORS to simply *play* a video. 
-  // Setting it forces strict checking, which Archive.org's redirect servers sometimes fail.
-  videoEl.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
-
-  if (subtitleUrl) {
-    const track = document.createElement('track');
-    track.kind = 'subtitles';
-    track.label = 'English';
-    track.srclang = 'en';
-    track.default = false;
-        
-    // Asynchronously fetch the subtitle and set it as a same-origin Blob URL
-    getSubtitleBlobUrl(subtitleUrl).then(blobUrl => {
-      track.src = blobUrl;
-    });
-        
-    videoEl.appendChild(track);
-        
-    // Force the track to show once the video data is loaded
-    videoEl.addEventListener('loadeddata', () => {
-      if (videoEl.textTracks.length > 0) {
-        videoEl.textTracks[0].mode = 'hidden';
-      }
-    });
-  }
-
-  // Append to DOM *after* the track is added
-  container.appendChild(videoEl);
-  attachDebugTimeline(videoEl, id, mediaType, season, episode, autoResume);
-
-  
-  // Fallback button if the first link fails
-  if (currentPlaybackLinks.length > 1) {
-    const btnContainer = document.createElement('div');
-    btnContainer.style.cssText = 'position: absolute; bottom: -45px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 100;';
+    // Add secondary source (v2) if it exists in your CSV
+    if (currentPlaybackLinks.length > 1) {
+        playerUrl += `&v2=${encodeURIComponent(currentPlaybackLinks[1])}`;
+    }
     
-	const sourceLabels = ['High Definition', 'Standard Definition']; 
-	
-    currentPlaybackLinks.forEach((link, index) => {
-      const btn = document.createElement('button');
-      const isActive = index === currentLinkIndex;
-            
-      btn.textContent = sourceLabels[index] || `Source ${index + 1}`;
-      btn.style.cssText = `
-        padding: 8px 16px;
-        background: ${isActive ? '#28a745' : '#dc3545'};
-        color: white;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
-        white-space: nowrap;
-        transition: background 0.2s;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-      `;
-            
-      // Hover effects for inactive buttons
-      btn.onmouseover = () => { if (!isActive) btn.style.background = '#b02a37'; };
-      btn.onmouseout = () => { if (!isActive) btn.style.background = '#dc3545'; };
-            
-      btn.onclick = () => {
-        if (!isActive) {
-          currentLinkIndex = index;
-          // Reload the player with the new source and auto-resume the timestamp
-          renderVideoPlayer(currentPlaybackLinks[currentLinkIndex], id, mediaType, season, episode, subtitleUrl, true);
+    // Add subtitles (sub) if they exist
+    if (subtitleUrl) {
+        playerUrl += `&sub=${encodeURIComponent(subtitleUrl)}`;
+    }
+    
+    // Add start time (t) if we are auto-resuming from localStorage
+    if (autoResume) {
+        const savedTime = loadVideoTimestamp(id, mediaType, season, episode);
+        if (savedTime > 0) {
+            playerUrl += `&t=${Math.floor(savedTime)}`;
         }
-      };
-      btnContainer.appendChild(btn);
-    });
-        
-    container.appendChild(btnContainer);
-  }
+    }
+
+    // 2. Create the Iframe
+    const iframe = document.createElement('iframe');
+    iframe.id = 'customVideoFrame';
+    iframe.allowFullscreen = true;
+    iframe.allow = "autoplay; encrypted-media; picture-in-picture";
+    iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;background:#000;';
+    iframe.src = playerUrl;
+    
+    container.appendChild(iframe);
+    
+    // Note: The custom player now handles the fallback sources (v2) and subtitles internally!
+    // We no longer need the manual fallback buttons, the CORS subtitle proxy, or the debug timeline.
 }
 
 /** Determines whether to use a direct MP4 link or an iframe fallback for playback */
