@@ -648,8 +648,7 @@ function setVideoSource(id, mediaType, season, episode, fallbackUrl, autoResume 
         
         // ✅ NEW: Generate multiple iframe fallback URLs
         const iframeBases = [
-            'https://vidsrc-embed.su',
-            'https://vidsrc.in',
+            'https://vidsrc.sh/',
 			'https://www.vidking.net'
         ];
         
@@ -1003,7 +1002,7 @@ async function handleVideoHash() {
             const data = await res.json();
             
             openVideoPlayer(
-                `https://vidsrc-embed.su/embed/movie/${id}`,
+                `https://vidsrc.sh//embed/movie/${id}`,
                 `${data.title} (${data.release_date?.split('-')[0]})`,
                 id,
                 'movie',
@@ -1044,7 +1043,7 @@ async function handleVideoHash() {
             const epTitle = `S${season}E${episode}: ${ep.name}`;
 
             openVideoPlayer(
-                `https://vidsrc-embed.su/embed/tv/${id}/${season}/${episode}`,
+                `https://vidsrc.sh//embed/tv/${id}/${season}/${episode}`,
                 `${showData.name} - ${epTitle}`,
                 id,
                 'tv',
@@ -1617,7 +1616,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
         if (item.media_type === "movie") {
             if (isInWatched) {
                 actionButtonsHTML = `
-                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/movie/${item.id}', ${escapeForInlineJS(title + ' (' + year + ')')}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}')">
+                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc.sh//embed/movie/${item.id}', ${escapeForInlineJS(title + ' (' + year + ')')}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}')">
                         ▶ Play Movie
                     </button>
                     <div style="display: flex; flex-direction: column; align-items: center; gap: 15px; margin-top: 15px;">
@@ -1636,7 +1635,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
                 `;
             } else {
                 actionButtonsHTML = `
-                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/movie/${item.id}', ${escapeForInlineJS(title + ' (' + year + ')')}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}')">
+                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc.sh//embed/movie/${item.id}', ${escapeForInlineJS(title + ' (' + year + ')')}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}')">
                         ▶ Play Movie
                     </button>
                     <div style="position: relative; display: inline-block;">
@@ -1672,7 +1671,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
                     `;
                 } else {
                     actionButtonsHTML = `
-                        <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${currentSeason}/${currentEpisode}', ${escapeForInlineJS(title + ' - S' + currentSeason + 'E' + currentEpisode)}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}', ${currentSeason}, ${currentEpisode})">
+                        <button class="play-btn" onclick="openVideoPlayer('https://vidsrc.sh//embed/tv/${item.id}/${currentSeason}/${currentEpisode}', ${escapeForInlineJS(title + ' - S' + currentSeason + 'E' + currentEpisode)}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}', ${currentSeason}, ${currentEpisode})">
                             ▶ Play Season ${currentSeason} Episode ${currentEpisode}
                         </button>
                         <div class="tv-action-group">
@@ -1695,7 +1694,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
                 }
             } else {
                 actionButtonsHTML = `
-                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/1/1', ${escapeForInlineJS(title + ' - S1E1')}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}', 1, 1)">
+                    <button class="play-btn" onclick="openVideoPlayer('https://vidsrc.sh//embed/tv/${item.id}/1/1', ${escapeForInlineJS(title + ' - S1E1')}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}', 1, 1)">
                         ▶ Play Season 1 Episode 1
                     </button>
                     <div style="position: relative; display: inline-block;">
@@ -1809,7 +1808,7 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
                                     const playBtnHTML = isUnreleased
                                         ? `<span class="episode-play disabled" title="Not released yet" style="background:#555;cursor:not-allowed">⏳</span>`
                                         : `<button class="episode-play" title="Play episode"
-                                            onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${item.id}/${seasonNum}/${ep.new_episode_number}', ${escapeForInlineJS(videoTitle)}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}', ${seasonNum}, ${ep.new_episode_number})"
+                                            onclick="openVideoPlayer('https://vidsrc.sh//embed/tv/${item.id}/${seasonNum}/${ep.new_episode_number}', ${escapeForInlineJS(videoTitle)}, ${item.id}, '${item.media_type}', ${escapeForInlineJS(title)}, '${data.poster_path || ''}', ${seasonNum}, ${ep.new_episode_number})"
                                             ▶
                                             </button>`;
                                     const unreleasedMsgHTML = isUnreleased
@@ -2015,7 +2014,7 @@ function updateModalUI(id, mediaType, title, nextSeason, nextEpisode) {
   
   if (modalActions) {
     modalActions.innerHTML = `
-      <button class="play-btn" id="tempPlayBtn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${id}/${nextSeason}/${nextEpisode}', ${escapeForInlineJS(title + ' - S' + nextSeason + 'E' + nextEpisode)}, ${id}, '${mediaType}', ${escapeForInlineJS(title)}, '${posterPath}', ${nextSeason}, ${nextEpisode})">
+      <button class="play-btn" id="tempPlayBtn" onclick="openVideoPlayer('https://vidsrc.sh//embed/tv/${id}/${nextSeason}/${nextEpisode}', ${escapeForInlineJS(title + ' - S' + nextSeason + 'E' + nextEpisode)}, ${id}, '${mediaType}', ${escapeForInlineJS(title)}, '${posterPath}', ${nextSeason}, ${nextEpisode})">
         ▶ Play Season ${nextSeason} Episode ${nextEpisode}
       </button>
       <div class="tv-action-group">
@@ -2077,7 +2076,7 @@ function updateModalToUnwatchedState(id, title) {
   const modalActions = document.querySelector('.modal-actions');
   if (modalActions) {
     modalActions.innerHTML = `
-      <button class="play-btn" onclick="openVideoPlayer('https://vidsrc-embed.su/embed/tv/${id}/1/1', ${escapeForInlineJS(title + ' - S1E1')}, ${id}, 'tv', ${escapeForInlineJS(title)}, '${posterPath}', 1, 1)">
+      <button class="play-btn" onclick="openVideoPlayer('https://vidsrc.sh//embed/tv/${id}/1/1', ${escapeForInlineJS(title + ' - S1E1')}, ${id}, 'tv', ${escapeForInlineJS(title)}, '${posterPath}', 1, 1)">
         ▶ Play Season 1 Episode 1
       </button>
       <div style="position: relative; display: inline-block;">
