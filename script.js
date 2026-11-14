@@ -103,6 +103,27 @@ async function loadTvEpisodeCustoms() {
   }
 }
 
+/** Calculates the custom episode count instantly without needing to fetch season details */
+function getCustomEpisodeCount(tmdbId, seasonNum, baseCount) {
+    if (!baseCount && baseCount !== 0) return baseCount; // Fallback if TMDB count is missing
+    let count = baseCount;
+    
+    tvEpisodeCustoms.forEach((val, key) => {
+        const parts = key.split('_');
+        if (parts.length === 3 && parts[0] === String(tmdbId) && parts[1] === String(seasonNum)) {
+            const origEp = parseInt(parts[2], 10);
+            if (origEp > baseCount) {
+                // It's an addition (episode number higher than TMDB's max)
+                if (val.name || val.date) count++;
+            } else {
+                // It's an existing episode
+                if (!val.name && !val.date) count--; // It's a removal
+            }
+        }
+    });
+    return Math.max(0, count);
+}
+
 /** Applies customizations (removals, edits, additions) and renumbers episodes */
 function applyEpisodeCustoms(tmdbId, seasonNum, tmdbEpisodes) {
     const processed = [];
@@ -1727,9 +1748,10 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
             const specialsSeason = data.seasons.find(s => s.season_number === 0);
             for (const season of numberedSeasons) {
                 const isCurrentSeason = currentSeason === season.season_number;
+                const customCount = getCustomEpisodeCount(item.id, season.season_number, season.episode_count);
                 modalHTML += `
                     <button class="season-toggle ${isCurrentSeason ? 'current' : ''}" data-season="${season.season_number}">
-                        ${season.name} <span style="color:#888;font-size:14px">(${season.episode_count || '?'} eps)</span>
+                        ${season.name} <span style="color:#888;font-size:14px">(${customCount || '?'} eps)</span>
                     </button>
                     <div class="episodes-list" id="episodes-s${season.season_number}">
                         <div class="episode-loading">Loading episodes...</div>
@@ -1738,9 +1760,10 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
             }
             if (specialsSeason) {
                 const isCurrentSeason = currentSeason === 0;
+                const customCount = getCustomEpisodeCount(item.id, 0, specialsSeason.episode_count);
                 modalHTML += `
                     <button class="season-toggle ${isCurrentSeason ? 'current' : ''}" data-season="0">
-                        Extras <span style="color:#888;font-size:14px">(${specialsSeason.episode_count || '?'} Extras)</span>
+                        Extras <span style="color:#888;font-size:14px">(${customCount || '?'} Extras)</span>
                     </button>
                     <div class="episodes-list" id="episodes-s0">
                         <div class="episode-loading">Loading episodes...</div>
@@ -1792,10 +1815,11 @@ async function showMovieDetails(item, fromContinueWatching = false, personRoleDa
                         try {
                             const seasonRes = await fetch(`https://api.themoviedb.org/3/tv/${item.id}/season/${seasonNum}?api_key=${apiKey}&language=en-US`);
                             const seasonData = await seasonRes.json();
-                            
+
                             // Apply customizations to get the true episode list
                             const customEpisodes = applyEpisodeCustoms(item.id, seasonNum, seasonData.episodes || []);
-                            
+
+                         
                             if (customEpisodes.length > 0) {
                                 const today = new Date(); today.setHours(0,0,0,0);
                                 episodesContainer.innerHTML = customEpisodes.map(ep => {
