@@ -85,7 +85,7 @@ async function loadTvEpisodeCustoms() {
     const csvText = await response.text();
     csvText.trim().split('\n').forEach((line, index) => {
       if (index === 0) return; // Skip header
-      const parts = line.split(',').map(s => s.trim());
+      const parts = parseCSVLine(line).map(s => s.trim());
       if (parts.length >= 3) {
         const [id, season, episode, name, date] = parts;
         if (id && season && episode) {
