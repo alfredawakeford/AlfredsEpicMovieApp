@@ -827,30 +827,39 @@ async function navigateEpisode(direction) {
     currentVideoState.season = s;
     currentVideoState.episode = e;
   } else {
-    if (direction === 1) {
-      if (e >= currentVideoState.totalEpisodesInSeason) {
-        if (s >= currentVideoState.totalSeasons) { alert("End of series!"); return; }
-        s++; e = 1;
-        try { 
-          const r = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${s}?api_key=${apiKey}`); 
-          currentVideoState.totalEpisodesInSeason = (await r.json()).episodes?.length || 0; 
-        } catch(err){}
-      } else { 
-        e++; 
-      }
-    } else {
-      if (e <= 1) {
-        if (s <= 1) { alert("First episode!"); return; }
-        s--;
-        try { 
-          const r = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${s}?api_key=${apiKey}`); 
-          currentVideoState.totalEpisodesInSeason = (await r.json()).episodes?.length || 0; 
-        } catch(err){}
-        e = currentVideoState.totalEpisodesInSeason;
-      } else { 
-        e--; 
-      }
-    }
+        if (direction === 1) {
+            if (e >= currentVideoState.totalEpisodesInSeason) {
+                if (s >= currentVideoState.totalSeasons) { alert("End of series!"); return; }
+                s++; e = 1;
+                try {
+                    const r = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${s}?api_key=${apiKey}`);
+                    const sData = await r.json();
+                    // ✅ Apply customs to get the true episode count for the new season
+                    const customEps = applyEpisodeCustoms(id, s, sData.episodes || []);
+                    currentVideoState.totalEpisodesInSeason = customEps.length;
+                } catch(err){}
+            } else {
+                e++;
+            }
+        } else {
+            if (e <= 1) {
+                if (s <= 1) { alert("First episode!"); return; }
+                s--;
+                try {
+                    const r = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${s}?api_key=${apiKey}`);
+                    const sData = await r.json();
+                    // ✅ Apply customs to get the true episode list for the previous season
+                    const customEps = applyEpisodeCustoms(id, s, sData.episodes || []);
+                    currentVideoState.totalEpisodesInSeason = customEps.length;
+                    
+                    // ✅ Set 'e' to the new_episode_number of the last custom episode
+                    // This ensures it skips over any removed episodes at the end of the season!
+                    e = customEps.length > 0 ? customEps[customEps.length - 1].new_episode_number : 1;
+                } catch(err){}
+            } else {
+                e--;
+            }
+        }
     currentVideoState.season = s;
     currentVideoState.episode = e;
     updateTVEpisode(id, currentVideoState.mediaType, s, e);
@@ -926,10 +935,14 @@ function updateButtonStates() {
       } else {
         (async () => {
           try {
-            const res = await fetch(`https://api.themoviedb.org/3/tv/${currentVideoState.id}/season/${nextS}?api_key=${apiKey}&language=en-US`);
-            const sData = await res.json();
-            const epData = sData.episodes?.find(ep => ep.episode_number === nextE);
-            if (epData?.air_date) {
+			const res = await fetch(`https://api.themoviedb.org/3/tv/${currentVideoState.id}/season/${nextS}?api_key=${apiKey}&language=en-US`);
+			const sData = await res.json();
+        
+			// ✅ Apply customs to find the correct custom episode
+			const customEps = applyEpisodeCustoms(currentVideoState.id, nextS, sData.episodes || []);
+			const epData = customEps.find(ep => ep.new_episode_number === nextE);
+        
+			if (epData?.air_date) {
               const airDate = new Date(epData.air_date);
               const today = new Date(); today.setHours(0,0,0,0);
               if (airDate > today) {
@@ -3882,7 +3895,7 @@ document.addEventListener("keydown", (e) => {
 
 // Data Management Button Listeners
 document.getElementById("clearMoviesFromWatching")?.addEventListener("click", () => {
-  if (confirm("Are you sure you want to remove all MOIES from Continue Watching? TV shows will remain.")) {
+  if (confirm("Are you sure you want to remove all MOVIES from Continue Watching? TV shows will remain.")) {
     const watched = getWatchedData();
     let removedCount = 0;
     for (const key in watched) {
