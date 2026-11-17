@@ -873,7 +873,15 @@ async function navigateEpisode(direction) {
   try {
     const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${s}?api_key=${apiKey}`);
     const sd = await res.json();
-    const ed = sd.episodes?.find(ep => ep.episode_number === e);
+    
+    // ✅ Apply customs and force episode to be an integer
+    const customEps = applyEpisodeCustoms(id, s, sd.episodes || []);
+    const epNum = parseInt(e, 10);
+    const ed = customEps.find(ep => ep.new_episode_number === epNum);
+    
+    // 🔍 Debug log
+    console.log("🔍 Nav Custom EP Check:", { season: s, episode: epNum, foundName: ed?.name });
+
     if (ed?.name) titleEl.textContent = `${currentVideoState.itemTitle} - ${epTag}: ${ed.name}`;
   } catch(err) {}
   
@@ -1056,12 +1064,14 @@ async function handleVideoHash() {
             if (!seasonRes.ok) throw new Error('Season not found');
             const seasonData = await seasonRes.json();
 
-            // 3. Validate the episode exists within that season
-            const ep = seasonData.episodes?.find(e => e.episode_number === episode);
-            if (!ep) throw new Error('Episode not found');
+			// 3. Validate the episode exists within that season (using custom episode list)
+			const customEps = applyEpisodeCustoms(id, season, seasonData.episodes || []);
+			const epNum = parseInt(episode, 10);
+			const ep = customEps.find(e => e.new_episode_number === epNum);
+			if (!ep) throw new Error('Episode not found');
 
-            // If we get here, everything is valid!
-            const epTitle = `S${season}E${episode}: ${ep.name}`;
+			// If we get here, everything is valid!
+			const epTitle = `S${season}E${episode}: ${ep.name}`;
 
             openVideoPlayer(
                 `https://vidsrc.sh/embed/tv/${id}/${season}/${episode}`,
@@ -2183,15 +2193,22 @@ async function openVideoPlayer(url, title, id, mediaType, itemTitle, posterPath,
   
   
   if (mediaType.trim() === "tv" && season !== null && episode !== null) {
-    try {
-      const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=en-US`);
-      const seasonData = await res.json();
-      const epData = seasonData.episodes?.find(ep => ep.episode_number === episode);
-      if (epData && epData.name) {
-        const epTag = season === 0 ? `Extra ${episode}` : `S${season}E${episode}`;
-        titleEl.textContent = `${itemTitle} - ${epTag}: ${epData.name}`;
-      }
-    } catch (err) { console.warn("Failed to fetch episode name: ", err); }
+	try {
+		const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=en-US`);
+		const seasonData = await res.json();
+		
+		// ✅ Apply customs and force episode to be an integer
+		const customEps = applyEpisodeCustoms(id, season, seasonData.episodes || []);
+		const epNum = parseInt(episode, 10);
+		const epData = customEps.find(ep => ep.new_episode_number === epNum);
+		
+		// 🔍 Debug log to check what's happening
+		console.log("🔍 Custom EP Check:", { season, episode: epNum, foundName: epData?.name });
+		if (epData && epData.name) {
+			const epTag = season === 0 ? `Extra ${episode}` : `S${season}E${episode}`;
+			titleEl.textContent = `${itemTitle} - ${epTag}: ${epData.name}`;
+		}
+	} catch (err) { console.warn("Failed to fetch episode name: ", err); }
   }
   
   setupVideoControls(id, mediaType, season, episode, itemTitle);
@@ -3865,7 +3882,7 @@ document.addEventListener("keydown", (e) => {
 
 // Data Management Button Listeners
 document.getElementById("clearMoviesFromWatching")?.addEventListener("click", () => {
-  if (confirm("Are you sure you want to remove all MOVIES from Continue Watching? TV shows will remain.")) {
+  if (confirm("Are you sure you want to remove all MOIES from Continue Watching? TV shows will remain.")) {
     const watched = getWatchedData();
     let removedCount = 0;
     for (const key in watched) {
